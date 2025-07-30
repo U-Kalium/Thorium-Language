@@ -1,0 +1,5 @@
+fn main() i32 {
+    var a: i32 = 420; var b: i32 = a
+    a = 10
+    return a
+}

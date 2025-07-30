@@ -1,0 +1,11 @@
+func $main:
+    i8.declare %a
+    i8.const 69
+    i8.const 420
+    i8.set %a
+    i8.get %a
+
+func $start export "_start" :
+    call $main
+    i8.return
+
