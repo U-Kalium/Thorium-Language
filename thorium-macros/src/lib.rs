@@ -1,12 +1,11 @@
 extern crate proc_macro;
 use std::str::FromStr;
 
-use proc_macro::{Ident, Literal, TokenStream, TokenTree};
-use quote::{quote, ToTokens};
+use proc_macro::{TokenStream, TokenTree};
 
 
 #[proc_macro_attribute]
-pub fn tokenize_words(attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn tokenize_words(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut tokens = TokenStream::new();
     tokens.extend(item.clone());
     let mut words_to_tokanize: Vec<(String, String)> = Vec::new();

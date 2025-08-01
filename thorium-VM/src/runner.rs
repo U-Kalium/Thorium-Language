@@ -14,7 +14,7 @@ pub struct State {
     // f64_stack: Vec<f64>,
     stack: Vec<NodeValue>,
 
-    variables: HashMap<String, Option<NodeValue>>
+    variables: HashMap<String, Option<NodeValue>>,
 }
 
 impl NodeFunc {
@@ -22,7 +22,7 @@ impl NodeFunc {
         for instruction in &self.intructions {
             match instruction.run(state) {
                 Some(val) => return Some(val),
-                None => {},
+                None => {}
             }
         }
         None
@@ -33,26 +33,23 @@ impl NodeIntruction {
     fn run(&self, state: &mut State) -> Option<NodeValue> {
         match self {
             NodeIntruction::Push(node_value) => {
-                        state.stack.push(node_value.clone());
-                        None
-                    },
+                state.stack.push(node_value.clone());
+                None
+            }
             NodeIntruction::Call(ident) => {
-                        let state_clone = state.clone();
-                        let func = state_clone.functions.get(ident).expect(
-                                &format!("could not find function {:?}", ident)
-                            );
-                        func.run(state);
-                        None
-                    },
-            NodeIntruction::Return => {
-                match state.stack.pop() {
-                    Some(val) => Some(val),
-                    None => None
-                }
+                let state_clone = state.clone();
+                let func = state_clone
+                    .functions
+                    .get(ident)
+                    .expect(&format!("could not find function {:?}", ident));
+                func.run(state);
+                None
+            }
+            NodeIntruction::Return => match state.stack.pop() {
+                Some(val) => Some(val),
+                None => None,
             },
-            NodeIntruction::Declare {
-                variable,  
-            } => {
+            NodeIntruction::Declare { variable } => {
                 let ident = variable.ident.clone();
                 if state.variables.contains_key(&ident) {
                     panic!("Declaration of variable {:?} even though it exists", ident)
@@ -60,10 +57,8 @@ impl NodeIntruction {
 
                 state.variables.insert(ident, None);
                 None
-            },
-            NodeIntruction::Set { 
-                variable, 
-            } => {
+            }
+            NodeIntruction::Set { variable } => {
                 let ident = variable.ident.clone();
                 if let Some(variable_val) = state.variables.get_mut(&ident) {
                     if let Some(stack_val) = state.stack.pop() {
@@ -73,10 +68,8 @@ impl NodeIntruction {
                     }
                 }
                 None
-            },
-            NodeIntruction::Get { 
-                variable, 
-            } => {
+            }
+            NodeIntruction::Get { variable } => {
                 let ident = variable.ident.clone();
                 if let Some(variable_val) = state.variables.get(&ident) {
                     if let Some(val) = variable_val {
@@ -84,9 +77,9 @@ impl NodeIntruction {
                     } else {
                         panic!("Variable {}, is empty yet tried to get from it", ident)
                     }
-                }  
+                }
                 None
-            },
+            }
             NodeIntruction::Add(node_type) => {
                 process_numerical_op(state, node_type.clone(), NumericeOp::Add);
                 None
@@ -117,78 +110,81 @@ enum NumericeOp {
     Add,
     Sub,
     Mul,
-    Div
+    Div,
 }
 
 macro_rules! perform_operation {
     ($operation:ident, $rhs:ident, $lhs:ident) => {
         match $operation {
-            NumericeOp::Add => {
-                $lhs + $rhs
-            },
-            NumericeOp::Sub => {
-                $lhs - $rhs
-            },
-            NumericeOp::Mul => {
-                $lhs * $rhs
-            },
-            NumericeOp::Div => {
-                $lhs / $rhs
-            }
+            NumericeOp::Add => $lhs + $rhs,
+            NumericeOp::Sub => $lhs - $rhs,
+            NumericeOp::Mul => $lhs * $rhs,
+            NumericeOp::Div => $lhs / $rhs,
         }
-
     };
 }
 
 fn process_numerical_op(state: &mut State, node_type: NodeType, operation: NumericeOp) {
-    let rhs = state.stack.pop().expect("Tried popping from empty track during numerical operation");
-    let lhs = state.stack.pop().expect("Tried popping from empty track during numerical operation");
+    let rhs = state
+        .stack
+        .pop()
+        .expect("Tried popping from empty track during numerical operation");
+    let lhs = state
+        .stack
+        .pop()
+        .expect("Tried popping from empty track during numerical operation");
 
     match node_type {
         NodeType::I32 => {
             if let (NodeValue::I32(rhs_val), NodeValue::I32(lhs_val)) = (rhs, lhs) {
-                state.stack.push(NodeValue::I32(perform_operation!(operation, rhs_val, lhs_val)))
-                
+                state.stack.push(NodeValue::I32(perform_operation!(
+                    operation, rhs_val, lhs_val
+                )))
             } else {
                 panic!("tried applying operation but rhs was {rhs:?} and lhs was {lhs:?}")
             }
         }
         NodeType::I64 => {
             if let (NodeValue::I64(rhs_val), NodeValue::I64(lhs_val)) = (rhs, lhs) {
-                state.stack.push(NodeValue::I64(perform_operation!(operation, rhs_val, lhs_val)))
-                
+                state.stack.push(NodeValue::I64(perform_operation!(
+                    operation, rhs_val, lhs_val
+                )))
             } else {
                 panic!("tried applying operation but rhs was {rhs:?} and lhs was {lhs:?}")
             }
         }
         NodeType::I16 => {
             if let (NodeValue::I16(rhs_val), NodeValue::I16(lhs_val)) = (rhs, lhs) {
-                state.stack.push(NodeValue::I16(perform_operation!(operation, rhs_val, lhs_val)))
-                
+                state.stack.push(NodeValue::I16(perform_operation!(
+                    operation, rhs_val, lhs_val
+                )))
             } else {
                 panic!("tried applying operation but rhs was {rhs:?} and lhs was {lhs:?}")
             }
         }
         NodeType::I8 => {
             if let (NodeValue::I8(rhs_val), NodeValue::I8(lhs_val)) = (rhs, lhs) {
-                state.stack.push(NodeValue::I8(perform_operation!(operation, rhs_val, lhs_val)))
-                
+                state.stack.push(NodeValue::I8(perform_operation!(
+                    operation, rhs_val, lhs_val
+                )))
             } else {
                 panic!("tried applying operation but rhs was {rhs:?} and lhs was {lhs:?}")
             }
         }
         NodeType::F32 => {
             if let (NodeValue::F32(rhs_val), NodeValue::F32(lhs_val)) = (rhs, lhs) {
-                state.stack.push(NodeValue::F32(perform_operation!(operation, rhs_val, lhs_val)))
-                
+                state.stack.push(NodeValue::F32(perform_operation!(
+                    operation, rhs_val, lhs_val
+                )))
             } else {
                 panic!("tried applying operation but rhs was {rhs:?} and lhs was {lhs:?}")
             }
         }
         NodeType::F64 => {
             if let (NodeValue::F64(rhs_val), NodeValue::F64(lhs_val)) = (rhs, lhs) {
-                state.stack.push(NodeValue::F64(perform_operation!(operation, rhs_val, lhs_val)))
-                
+                state.stack.push(NodeValue::F64(perform_operation!(
+                    operation, rhs_val, lhs_val
+                )))
             } else {
                 panic!("tried applying operation but rhs was {rhs:?} and lhs was {lhs:?}")
             }
@@ -196,31 +192,29 @@ fn process_numerical_op(state: &mut State, node_type: NodeType, operation: Numer
     }
 
     match (rhs, lhs) {
-        (NodeValue::F32(rhs_val), NodeValue::F32(lhs_val)) => {
-            state.stack.push(NodeValue::F32(perform_operation!(operation, rhs_val, lhs_val)))
-        }
-        (NodeValue::F64(rhs_val), NodeValue::F64(lhs_val)) => {
-            state.stack.push(NodeValue::F64(perform_operation!(operation, rhs_val, lhs_val)))
-        }
-        (NodeValue::I32(rhs_val), NodeValue::I32(lhs_val)) => {
-            state.stack.push(NodeValue::I32(perform_operation!(operation, rhs_val, lhs_val)))
-        }
-        (NodeValue::I64(rhs_val), NodeValue::I64(lhs_val)) => {
-            state.stack.push(NodeValue::I64(perform_operation!(operation, rhs_val, lhs_val)))
-        }
-        (NodeValue::I16(rhs_val), NodeValue::I16(lhs_val)) => {
-            state.stack.push(NodeValue::I16(perform_operation!(operation, rhs_val, lhs_val)))
-        }
-        (NodeValue::I8(rhs_val), NodeValue::I8(lhs_val)) => {
-            state.stack.push(NodeValue::I8(perform_operation!(operation, rhs_val, lhs_val)))
-        }
+        (NodeValue::F32(rhs_val), NodeValue::F32(lhs_val)) => state.stack.push(NodeValue::F32(
+            perform_operation!(operation, rhs_val, lhs_val),
+        )),
+        (NodeValue::F64(rhs_val), NodeValue::F64(lhs_val)) => state.stack.push(NodeValue::F64(
+            perform_operation!(operation, rhs_val, lhs_val),
+        )),
+        (NodeValue::I32(rhs_val), NodeValue::I32(lhs_val)) => state.stack.push(NodeValue::I32(
+            perform_operation!(operation, rhs_val, lhs_val),
+        )),
+        (NodeValue::I64(rhs_val), NodeValue::I64(lhs_val)) => state.stack.push(NodeValue::I64(
+            perform_operation!(operation, rhs_val, lhs_val),
+        )),
+        (NodeValue::I16(rhs_val), NodeValue::I16(lhs_val)) => state.stack.push(NodeValue::I16(
+            perform_operation!(operation, rhs_val, lhs_val),
+        )),
+        (NodeValue::I8(rhs_val), NodeValue::I8(lhs_val)) => state.stack.push(NodeValue::I8(
+            perform_operation!(operation, rhs_val, lhs_val),
+        )),
         (rhs_val, lhs_val) => {
             panic!("tried applying operation but rhs was {rhs_val:?} and lhs was {lhs_val:?}")
         }
     }
-
 }
-
 
 impl State {
     pub fn new(program: NodeProgram) -> Self {
@@ -247,7 +241,5 @@ impl State {
                 println!("returned: {:?}", val)
             }
         }
-
-        
     }
 }

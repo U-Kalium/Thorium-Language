@@ -1,8 +1,6 @@
-
 use thorium_macros::tokenize_words;
 
-#[derive(PartialEq)]
-#[derive(Debug)]
+#[derive(PartialEq, Debug)]
 pub enum Token {
     Word(WordToken),
     FuncIdent(String),
@@ -15,8 +13,7 @@ pub enum Token {
     Dash,
 }
 
-#[derive(PartialEq)]
-#[derive(Debug)]
+#[derive(PartialEq, Debug)]
 #[tokenize_words]
 pub enum WordToken {
     Func,
@@ -49,12 +46,8 @@ pub enum WordToken {
     Lte,
     Lt,
     Max,
-    Min
+    Min,
 }
-
-
-
-    
 
 pub fn tokenize(content: String) -> Result<Vec<Token>, String> {
     let mut tokens = Vec::new();
@@ -67,20 +60,26 @@ pub fn tokenize(content: String) -> Result<Vec<Token>, String> {
         if peeked.is_whitespace() {
             content_chars.next();
         } else if peeked.is_alphabetic() {
-            while content_chars.peek().is_some_and(|char| char.is_alphanumeric()) {
+            while content_chars
+                .peek()
+                .is_some_and(|char| char.is_alphanumeric())
+            {
                 buffer.push(content_chars.next().unwrap());
             }
 
             if let Err(error) = tokenize_word(&mut tokens, &mut buffer) {
                 return Err(error);
             }
-
-
         } else if peeked.is_numeric() {
-            while content_chars.peek().is_some_and(|char| char.is_alphanumeric()) {
+            while content_chars
+                .peek()
+                .is_some_and(|char| char.is_alphanumeric())
+            {
                 buffer.push(content_chars.next().unwrap());
             }
-            tokens.push(Token::Number(buffer.parse().expect("could not parse integer")));
+            tokens.push(Token::Number(
+                buffer.parse().expect("could not parse integer"),
+            ));
         } else {
             match content_chars.peek().unwrap() {
                 ':' => {
@@ -93,7 +92,10 @@ pub fn tokenize(content: String) -> Result<Vec<Token>, String> {
                 }
                 '$' => {
                     content_chars.next();
-                    while content_chars.peek().is_some_and(|char| char.is_alphanumeric()) {
+                    while content_chars
+                        .peek()
+                        .is_some_and(|char| char.is_alphanumeric())
+                    {
                         buffer.push(content_chars.next().unwrap());
                     }
 
@@ -101,7 +103,10 @@ pub fn tokenize(content: String) -> Result<Vec<Token>, String> {
                 }
                 '%' => {
                     content_chars.next();
-                    while content_chars.peek().is_some_and(|char| char.is_alphanumeric()) {
+                    while content_chars
+                        .peek()
+                        .is_some_and(|char| char.is_alphanumeric())
+                    {
                         buffer.push(content_chars.next().unwrap());
                     }
 
@@ -120,7 +125,7 @@ pub fn tokenize(content: String) -> Result<Vec<Token>, String> {
                     tokens.push(Token::Dash);
                     content_chars.next();
                 }
-                unkown => return Err(format!("unkown punctuation word {}", unkown).to_string())
+                unkown => return Err(format!("unkown punctuation word {}", unkown).to_string()),
             }
         }
         buffer.clear();
