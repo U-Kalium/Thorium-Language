@@ -1,4 +1,4 @@
-use std::env;
+// use std::env;
 use std::fs;
 
 use crate::parser::parse_tokens;
@@ -12,7 +12,7 @@ mod runner;
 mod syntax_tree;
 
 fn main() {
-    let command_line_args: Vec<String> = env::args().collect();
+    // let command_line_args: Vec<String> = env::args().collect();
 
     // let file_content = fs::read_to_string(command_line_args[1].clone())
     //     .expect("Should have been able to read the file");

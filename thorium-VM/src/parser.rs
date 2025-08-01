@@ -2,7 +2,7 @@ use core::panic;
 use std::iter::Peekable;
 use std::ops::Neg;
 
-use crate::tokenizer::Token;
+use crate::tokenizer::{Token, WordToken};
 use crate::syntax_tree::*;
 
 
@@ -19,7 +19,7 @@ impl NodeFunc {
             token => panic!("Syntax Error: expected FuncIdent found {:?}", token)
         }
         match tokens.next().unwrap() {
-            Token::Export => {
+            Token::Word(WordToken::Export) => {
                 func_node.export_name = match tokens.next().unwrap() {
                     Token::StringLit(lit) => Some(lit.clone()),
                     token => panic!("Syntax Error: expected StringLit found {:?}", token)
@@ -42,14 +42,14 @@ fn parse_instructions<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peekable<I
     let mut instrucions = Vec::new();
 
     while tokens.peek().is_some_and(|token| match **token {
-        Token::I32 => true,
-        Token::I16 => true,
-        Token::I8 => true,
-        Token::I64 => true,
-        Token::F32 => true,
-        Token::F64 => true,
-        Token::Call => true,
-        Token::Return => true,
+        Token::Word(WordToken::I32) => true,
+        Token::Word(WordToken::I16) => true,
+        Token::Word(WordToken::I8) => true,
+        Token::Word(WordToken::I64) => true,
+        Token::Word(WordToken::F32) => true,
+        Token::Word(WordToken::F64) => true,
+        Token::Word(WordToken::Call) => true,
+        Token::Word(WordToken::Return) => true,
         _ => false
     }) {
         instrucions.push(NodeIntruction::parse(tokens));
@@ -65,7 +65,7 @@ fn parse_value_instruction<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peeka
     }
 
     match tokens.next().unwrap() {
-        Token::Push => {
+        Token::Word(WordToken::Push) => {
             let mut  is_negative = false;
             match tokens.peek().unwrap() {
                 Token::Dash => {
@@ -165,16 +165,16 @@ fn parse_value_instruction<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peeka
             // value);
         }
 
-        Token::Add => {
+        Token::Word(WordToken::Add) => {
             NodeIntruction::Add(node_type)
         }
-        Token::Sub => {
+        Token::Word(WordToken::Sub) => {
             NodeIntruction::Sub(node_type)
         }
-        Token::Div => {
+        Token::Word(WordToken::Div) => {
             NodeIntruction::Div(node_type)
         }
-        Token::Mul => {
+        Token::Word(WordToken::Mul) => {
             NodeIntruction::Mul(node_type)
         }
         token => panic!("Syntax Error: this {:?} does not go after a type identifier", token)
@@ -184,47 +184,47 @@ fn parse_value_instruction<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peeka
 impl NodeIntruction {
     fn parse<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peekable<I>) -> NodeIntruction {
         match tokens.next().unwrap() {
-            Token::I32 => {
+            Token::Word(WordToken::I32) => {
                 parse_value_instruction(tokens, NodeType::I32)
             }
-            Token::I16 => {
+            Token::Word(WordToken::I16) => {
                 parse_value_instruction(tokens, NodeType::I16)
             }
-            Token::I64 => {
+            Token::Word(WordToken::I64) => {
                 parse_value_instruction(tokens, NodeType::I64)
             }
-            Token::I8 => {
+            Token::Word(WordToken::I8) => {
                 parse_value_instruction(tokens, NodeType::I8)
             }
-            Token::F32 => {
+            Token::Word(WordToken::F32) => {
                 parse_value_instruction(tokens, NodeType::F32)
             }
-            Token::F64 => {
+            Token::Word(WordToken::F64) => {
                 parse_value_instruction(tokens, NodeType::F64)
             }
-            Token::Call => {
+            Token::Word(WordToken::Call) => {
                 match tokens.next().unwrap() {
                     Token::FuncIdent(ident) => NodeIntruction::Call(ident.clone()),
                     token => panic!("Syntax Error: expected FuncIdent found {:?}", token)
                 }
             }
-            Token::Pop => {
+            Token::Word(WordToken::Pop) => {
                 NodeIntruction::Pop
             }
-            Token::Return => {
+            Token::Word(WordToken::Return) => {
                 NodeIntruction::Return
             }
-            Token::Declare => {
+            Token::Word(WordToken::Declare) => {
                 NodeIntruction::Declare {
                     variable: NodeVariable::parse(tokens),
                 }
             }
-            Token::Set => {
+            Token::Word(WordToken::Set) => {
                 NodeIntruction::Set {
                     variable:NodeVariable::parse(tokens),
                 }
             }
-            Token::Get => {
+            Token::Word(WordToken::Get) => {
                 NodeIntruction::Get {
                     variable:NodeVariable::parse(tokens),
                 }
@@ -255,7 +255,7 @@ pub fn parse_tokens(tokens: &Vec<Token>) -> NodeProgram {
     while tokens_iter.peek().is_some() {
         let peeked = tokens_iter.peek().unwrap();
         match peeked {
-            Token::Func => {
+            Token::Word(WordToken::Func) => {
                 functions.push(NodeFunc::parse(&mut tokens_iter));
             }
             Token::EOF => {break;}
