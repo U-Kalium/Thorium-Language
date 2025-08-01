@@ -44,15 +44,14 @@ impl NodeIntruction {
                         func.run(state);
                         None
                     },
-            NodeIntruction::Return(node_type) => {
+            NodeIntruction::Return => {
                 match state.stack.pop() {
                     Some(val) => Some(val),
                     None => None
                 }
             },
             NodeIntruction::Declare {
-                variable, 
-                node_type 
+                variable,  
             } => {
                 let ident = variable.ident.clone();
                 if state.variables.contains_key(&ident) {
@@ -64,10 +63,9 @@ impl NodeIntruction {
             },
             NodeIntruction::Set { 
                 variable, 
-                node_type
             } => {
                 let ident = variable.ident.clone();
-                if let Some(mut variable_val) = state.variables.get_mut(&ident) {
+                if let Some(variable_val) = state.variables.get_mut(&ident) {
                     if let Some(stack_val) = state.stack.pop() {
                         *variable_val = Some(stack_val)
                     } else {
@@ -78,7 +76,6 @@ impl NodeIntruction {
             },
             NodeIntruction::Get { 
                 variable, 
-                node_type
             } => {
                 let ident = variable.ident.clone();
                 if let Some(variable_val) = state.variables.get(&ident) {
@@ -106,7 +103,7 @@ impl NodeIntruction {
                 process_numerical_op(state, node_type.clone(), NumericeOp::Div);
                 None
             }
-            NodeIntruction::Pop(node_type) => {
+            NodeIntruction::Pop => {
                 if state.stack.pop().is_none() {
                     panic!("tried popping when the stack is empty")
                 }
@@ -138,7 +135,7 @@ macro_rules! perform_operation {
             NumericeOp::Div => {
                 $lhs / $rhs
             }
-        };
+        }
 
     };
 }
@@ -146,6 +143,57 @@ macro_rules! perform_operation {
 fn process_numerical_op(state: &mut State, node_type: NodeType, operation: NumericeOp) {
     let rhs = state.stack.pop().expect("Tried popping from empty track during numerical operation");
     let lhs = state.stack.pop().expect("Tried popping from empty track during numerical operation");
+
+    match node_type {
+        NodeType::I32 => {
+            if let (NodeValue::I32(rhs_val), NodeValue::I32(lhs_val)) = (rhs, lhs) {
+                state.stack.push(NodeValue::I32(perform_operation!(operation, rhs_val, lhs_val)))
+                
+            } else {
+                panic!("tried applying operation but rhs was {rhs:?} and lhs was {lhs:?}")
+            }
+        }
+        NodeType::I64 => {
+            if let (NodeValue::I64(rhs_val), NodeValue::I64(lhs_val)) = (rhs, lhs) {
+                state.stack.push(NodeValue::I64(perform_operation!(operation, rhs_val, lhs_val)))
+                
+            } else {
+                panic!("tried applying operation but rhs was {rhs:?} and lhs was {lhs:?}")
+            }
+        }
+        NodeType::I16 => {
+            if let (NodeValue::I16(rhs_val), NodeValue::I16(lhs_val)) = (rhs, lhs) {
+                state.stack.push(NodeValue::I16(perform_operation!(operation, rhs_val, lhs_val)))
+                
+            } else {
+                panic!("tried applying operation but rhs was {rhs:?} and lhs was {lhs:?}")
+            }
+        }
+        NodeType::I8 => {
+            if let (NodeValue::I8(rhs_val), NodeValue::I8(lhs_val)) = (rhs, lhs) {
+                state.stack.push(NodeValue::I8(perform_operation!(operation, rhs_val, lhs_val)))
+                
+            } else {
+                panic!("tried applying operation but rhs was {rhs:?} and lhs was {lhs:?}")
+            }
+        }
+        NodeType::F32 => {
+            if let (NodeValue::F32(rhs_val), NodeValue::F32(lhs_val)) = (rhs, lhs) {
+                state.stack.push(NodeValue::F32(perform_operation!(operation, rhs_val, lhs_val)))
+                
+            } else {
+                panic!("tried applying operation but rhs was {rhs:?} and lhs was {lhs:?}")
+            }
+        }
+        NodeType::F64 => {
+            if let (NodeValue::F64(rhs_val), NodeValue::F64(lhs_val)) = (rhs, lhs) {
+                state.stack.push(NodeValue::F64(perform_operation!(operation, rhs_val, lhs_val)))
+                
+            } else {
+                panic!("tried applying operation but rhs was {rhs:?} and lhs was {lhs:?}")
+            }
+        }
+    }
 
     match (rhs, lhs) {
         (NodeValue::F32(rhs_val), NodeValue::F32(lhs_val)) => {

@@ -8,28 +8,25 @@ pub struct NodeFunc {
 #[derive(Debug, Clone)]
 pub enum NodeIntruction {
     Push(NodeValue),
-    Pop(NodeType),
+    Pop,
     Call(String),
-    Return(NodeType),
+    Return,
     Add(NodeType),
     Sub(NodeType),
     Div(NodeType),
     Mul(NodeType),
     Declare {
         variable: NodeVariable,
-        node_type: NodeType
     },
     Set {
         variable: NodeVariable,
-        node_type: NodeType
     },
     Get {
         variable: NodeVariable,
-        node_type: NodeType
     },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum NodeValue {
     I32(i32),
     I64(i64),

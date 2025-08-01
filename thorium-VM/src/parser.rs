@@ -49,6 +49,7 @@ fn parse_instructions<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peekable<I
         Token::F32 => true,
         Token::F64 => true,
         Token::Call => true,
+        Token::Return => true,
         _ => false
     }) {
         instrucions.push(NodeIntruction::parse(tokens));
@@ -74,14 +75,14 @@ fn parse_value_instruction<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peeka
             _ => {}
             }
             match tokens.next().unwrap() {
-                Token::Integer(int) => {
+                Token::Number(int) => {
                     match node_type {
                         NodeType::F32 => {
                             let left_of_point = *int;
                             match tokens.next().unwrap() {
                                 Token::FullStop => {
                                     match tokens.next().unwrap() {
-                                        Token::Integer(right_of_point) => {
+                                        Token::Number(right_of_point) => {
                                             let float: f32 = format!("{}.{}", left_of_point, right_of_point).parse().expect("could not convert to float");
                                             if is_negative {
                                                 NodeIntruction::Push(NodeValue::F32(-float))
@@ -89,11 +90,11 @@ fn parse_value_instruction<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peeka
                                                 NodeIntruction::Push(NodeValue::F32(float))
                                             }
                                         }
-                                        token => panic!("Syntax Error: expected . found {:?}", token)   
+                                        token => panic!("Syntax Error: expected . found {:?} for float", token)   
                                     }
 
                                 }
-                                token => panic!("Syntax Error: expected . found {:?}", token)
+                                token => panic!("Syntax Error: expected . found {:?} for float", token)
                             }
                         }
                         NodeType::F64 => {
@@ -102,7 +103,7 @@ fn parse_value_instruction<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peeka
                             match tokens.next().unwrap() {
                                 Token::FullStop => {
                                     match tokens.next().unwrap() {
-                                        Token::Integer(right_of_point) => {
+                                        Token::Number(right_of_point) => {
                                             let float: f64 = format!("{}.{}", left_of_point, right_of_point).parse().expect("could not convert to float");
                                             if is_negative {
                                                 NodeIntruction::Push(NodeValue::F64(-float))
@@ -110,11 +111,11 @@ fn parse_value_instruction<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peeka
                                                 NodeIntruction::Push(NodeValue::F64(float))
                                             }
                                         }
-                                        token => panic!("Syntax Error: expected . found {:?}", token)   
+                                        token => panic!("Syntax Error: expected . found {:?} for float", token)   
                                     }
 
                                 }
-                                token => panic!("Syntax Error: expected . found {:?}", token)
+                                token => panic!("Syntax Error: expected . found {:?} for float", token)
                             }
                         }
                         NodeType::I32 => {
@@ -163,27 +164,7 @@ fn parse_value_instruction<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peeka
             }
             // value);
         }
-        Token::Return => {
-            NodeIntruction::Return(node_type)
-        },
-        Token::Declare => {
-            NodeIntruction::Declare {
-                variable: NodeVariable::parse(tokens),
-                node_type: node_type
-            }
-        }
-        Token::Set => {
-            NodeIntruction::Set {
-                variable:NodeVariable::parse(tokens),
-                node_type: node_type
-            }
-        }
-        Token::Get => {
-            NodeIntruction::Get {
-                variable:NodeVariable::parse(tokens),
-                node_type: node_type
-            }
-        }
+
         Token::Add => {
             NodeIntruction::Add(node_type)
         }
@@ -195,9 +176,6 @@ fn parse_value_instruction<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peeka
         }
         Token::Mul => {
             NodeIntruction::Mul(node_type)
-        }
-        Token::Pop => {
-            NodeIntruction::Pop(node_type)
         }
         token => panic!("Syntax Error: this {:?} does not go after a type identifier", token)
     }
@@ -228,6 +206,27 @@ impl NodeIntruction {
                 match tokens.next().unwrap() {
                     Token::FuncIdent(ident) => NodeIntruction::Call(ident.clone()),
                     token => panic!("Syntax Error: expected FuncIdent found {:?}", token)
+                }
+            }
+            Token::Pop => {
+                NodeIntruction::Pop
+            }
+            Token::Return => {
+                NodeIntruction::Return
+            }
+            Token::Declare => {
+                NodeIntruction::Declare {
+                    variable: NodeVariable::parse(tokens),
+                }
+            }
+            Token::Set => {
+                NodeIntruction::Set {
+                    variable:NodeVariable::parse(tokens),
+                }
+            }
+            Token::Get => {
+                NodeIntruction::Get {
+                    variable:NodeVariable::parse(tokens),
                 }
             }
             token => panic!("Syntax Error: expected instruction found {:?}", token)

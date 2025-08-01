@@ -15,7 +15,7 @@ pub enum Token {
     FullStop,
     Push,
     Pop,
-    Integer(i128),
+    Number(i128),
     Return,
     Export,
     StringLit(String),
@@ -110,7 +110,7 @@ pub fn tokenize(content: String) -> Result<Vec<Token>, String> {
             while content_chars.peek().is_some_and(|char| char.is_alphanumeric()) {
                 buffer.push(content_chars.next().unwrap());
             }
-            tokens.push(Token::Integer(buffer.parse().expect("could not parse integer")));
+            tokens.push(Token::Number(buffer.parse().expect("could not parse integer")));
         } else {
             match content_chars.peek().unwrap() {
                 ':' => {
