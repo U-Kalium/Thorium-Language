@@ -1,5 +1,5 @@
 func $main:
-    f32.push -0.1
+    i32.push -0
 
 func $start export "_start" :
     call $main

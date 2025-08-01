@@ -74,76 +74,90 @@ fn parse_value_instruction<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peeka
             _ => {}
             }
             match tokens.next().unwrap() {
-                Token::Integer(int) => match node_type {
-                    NodeType::F32 => {
-                        let left_of_point = *int;
-                        match tokens.next().unwrap() {
-                            Token::FullStop => {
-                                match tokens.next().unwrap() {
-                                    Token::Integer(right_of_point) => {
-                                        let float: f32 = format!("{}.{}", left_of_point, right_of_point).parse().expect("could not convert to float");
-                                        if is_negative {
-                                            NodeIntruction::Push(NodeValue::F32(-float))
-                                        } else {
-                                            NodeIntruction::Push(NodeValue::F32(float))
+                Token::Integer(int) => {
+                    match node_type {
+                        NodeType::F32 => {
+                            let left_of_point = *int;
+                            match tokens.next().unwrap() {
+                                Token::FullStop => {
+                                    match tokens.next().unwrap() {
+                                        Token::Integer(right_of_point) => {
+                                            let float: f32 = format!("{}.{}", left_of_point, right_of_point).parse().expect("could not convert to float");
+                                            if is_negative {
+                                                NodeIntruction::Push(NodeValue::F32(-float))
+                                            } else {
+                                                NodeIntruction::Push(NodeValue::F32(float))
+                                            }
                                         }
+                                        token => panic!("Syntax Error: expected . found {:?}", token)   
                                     }
-                                    token => panic!("Syntax Error: expected . found {:?}", token)   
-                                }
 
+                                }
+                                token => panic!("Syntax Error: expected . found {:?}", token)
                             }
-                            token => panic!("Syntax Error: expected . found {:?}", token)
                         }
-                    }
-                    NodeType::F64 => {
-                        
-                        let left_of_point = *int;
-                        match tokens.next().unwrap() {
-                            Token::FullStop => {
-                                match tokens.next().unwrap() {
-                                    Token::Integer(right_of_point) => {
-                                        let float: f64 = format!("{}.{}", left_of_point, right_of_point).parse().expect("could not convert to float");
-                                        if is_negative {
-                                            NodeIntruction::Push(NodeValue::F64(-float))
-                                        } else {
-                                            NodeIntruction::Push(NodeValue::F64(float))
+                        NodeType::F64 => {
+                            
+                            let left_of_point = *int;
+                            match tokens.next().unwrap() {
+                                Token::FullStop => {
+                                    match tokens.next().unwrap() {
+                                        Token::Integer(right_of_point) => {
+                                            let float: f64 = format!("{}.{}", left_of_point, right_of_point).parse().expect("could not convert to float");
+                                            if is_negative {
+                                                NodeIntruction::Push(NodeValue::F64(-float))
+                                            } else {
+                                                NodeIntruction::Push(NodeValue::F64(float))
+                                            }
                                         }
+                                        token => panic!("Syntax Error: expected . found {:?}", token)   
                                     }
-                                    token => panic!("Syntax Error: expected . found {:?}", token)   
-                                }
 
+                                }
+                                token => panic!("Syntax Error: expected . found {:?}", token)
                             }
-                            token => panic!("Syntax Error: expected . found {:?}", token)
                         }
+                        NodeType::I32 => {
+                            if **tokens.peek().unwrap() == Token::FullStop {
+                                panic!("Did not expect Fullstop after none float type")
+                            }
+                            if is_negative {
+                                NodeIntruction::Push(NodeValue::I32((*int as i32 ).neg()))
+                            } else {
+                                NodeIntruction::Push(NodeValue::I32(*int as i32))
+                            }
+                        },
+                        NodeType::I64 => {
+                            if **tokens.peek().unwrap() == Token::FullStop {
+                                panic!("Did not expect Fullstop after none float type")
+                            }
+                            if is_negative {
+                                NodeIntruction::Push(NodeValue::I64((*int as i64 ).neg()))
+                            } else {
+                                NodeIntruction::Push(NodeValue::I64(*int as i64))
+                            }
+                        },
+                        NodeType::I16 => {
+                            if **tokens.peek().unwrap() == Token::FullStop {
+                                panic!("Did not expect Fullstop after none float type")
+                            }
+                            if is_negative {
+                                NodeIntruction::Push(NodeValue::I16((*int as i16 ).neg()))
+                            } else {
+                                NodeIntruction::Push(NodeValue::I16(*int as i16))
+                            }
+                        },
+                        NodeType::I8 => {
+                            if **tokens.peek().unwrap() == Token::FullStop {
+                                panic!("Did not expect Fullstop after none float type")
+                            }
+                            if is_negative {
+                                NodeIntruction::Push(NodeValue::I8((*int as i8 ).neg()))
+                            } else {
+                                NodeIntruction::Push(NodeValue::I8(*int as i8))
+                            }
+                        },
                     }
-                    NodeType::I32 => {
-                        if is_negative {
-                            NodeIntruction::Push(NodeValue::I32((*int as i32 ).neg()))
-                        } else {
-                            NodeIntruction::Push(NodeValue::I32(*int as i32))
-                        }
-                    },
-                    NodeType::I64 => {
-                        if is_negative {
-                            NodeIntruction::Push(NodeValue::I64((*int as i64 ).neg()))
-                        } else {
-                            NodeIntruction::Push(NodeValue::I64(*int as i64))
-                        }
-                    },
-                    NodeType::I16 => {
-                        if is_negative {
-                            NodeIntruction::Push(NodeValue::I16((*int as i16 ).neg()))
-                        } else {
-                            NodeIntruction::Push(NodeValue::I16(*int as i16))
-                        }
-                    },
-                    NodeType::I8 => {
-                        if is_negative {
-                            NodeIntruction::Push(NodeValue::I8((*int as i8 ).neg()))
-                        } else {
-                            NodeIntruction::Push(NodeValue::I8(*int as i8))
-                        }
-                    },
                 },
                 token => panic!("Syntax Error: expected Value found {:?}", token)
             }
