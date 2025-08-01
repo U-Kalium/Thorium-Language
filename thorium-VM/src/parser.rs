@@ -1,5 +1,6 @@
 use core::panic;
 use std::iter::Peekable;
+use std::ops::Neg;
 
 use crate::tokenizer::Token;
 use crate::syntax_tree::*;
@@ -45,6 +46,8 @@ fn parse_instructions<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peekable<I
         Token::I16 => true,
         Token::I8 => true,
         Token::I64 => true,
+        Token::F32 => true,
+        Token::F64 => true,
         Token::Call => true,
         _ => false
     }) {
@@ -59,15 +62,88 @@ fn parse_value_instruction<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peeka
     if *token != Token::FullStop {
         panic!("Syntax Error: expected FUllstop found {:?}", token)
     }
+
     match tokens.next().unwrap() {
         Token::Const => {
+            let mut  is_negative = false;
+            match tokens.peek().unwrap() {
+                Token::Dash => {
+                    tokens.next();
+                    is_negative = true
+                }
+            _ => {}
+            }
             match tokens.next().unwrap() {
-
                 Token::Integer(int) => match node_type {
-                    NodeType::I32 => NodeIntruction::Const(NodeValue::I32(*int as i32)),
-                    NodeType::I64 => NodeIntruction::Const(NodeValue::I64(*int as i64)),
-                    NodeType::I16 => NodeIntruction::Const(NodeValue::I16(*int as i16)),
-                    NodeType::I8 => NodeIntruction::Const(NodeValue::I8(*int as i8)),
+                    NodeType::F32 => {
+                        let left_of_point = *int;
+                        match tokens.next().unwrap() {
+                            Token::FullStop => {
+                                match tokens.next().unwrap() {
+                                    Token::Integer(right_of_point) => {
+                                        let float: f32 = format!("{}.{}", left_of_point, right_of_point).parse().expect("could not convert to float");
+                                        if is_negative {
+                                            NodeIntruction::Const(NodeValue::F32(-float))
+                                        } else {
+                                            NodeIntruction::Const(NodeValue::F32(float))
+                                        }
+                                    }
+                                    token => panic!("Syntax Error: expected . found {:?}", token)   
+                                }
+
+                            }
+                            token => panic!("Syntax Error: expected . found {:?}", token)
+                        }
+                    }
+                    NodeType::F64 => {
+                        
+                        let left_of_point = *int;
+                        match tokens.next().unwrap() {
+                            Token::FullStop => {
+                                match tokens.next().unwrap() {
+                                    Token::Integer(right_of_point) => {
+                                        let float: f64 = format!("{}.{}", left_of_point, right_of_point).parse().expect("could not convert to float");
+                                        if is_negative {
+                                            NodeIntruction::Const(NodeValue::F64(-float))
+                                        } else {
+                                            NodeIntruction::Const(NodeValue::F64(float))
+                                        }
+                                    }
+                                    token => panic!("Syntax Error: expected . found {:?}", token)   
+                                }
+
+                            }
+                            token => panic!("Syntax Error: expected . found {:?}", token)
+                        }
+                    }
+                    NodeType::I32 => {
+                        if is_negative {
+                            NodeIntruction::Const(NodeValue::I32((*int as i32 ).neg()))
+                        } else {
+                            NodeIntruction::Const(NodeValue::I32(*int as i32))
+                        }
+                    },
+                    NodeType::I64 => {
+                        if is_negative {
+                            NodeIntruction::Const(NodeValue::I64((*int as i64 ).neg()))
+                        } else {
+                            NodeIntruction::Const(NodeValue::I64(*int as i64))
+                        }
+                    },
+                    NodeType::I16 => {
+                        if is_negative {
+                            NodeIntruction::Const(NodeValue::I16((*int as i16 ).neg()))
+                        } else {
+                            NodeIntruction::Const(NodeValue::I16(*int as i16))
+                        }
+                    },
+                    NodeType::I8 => {
+                        if is_negative {
+                            NodeIntruction::Const(NodeValue::I8((*int as i8 ).neg()))
+                        } else {
+                            NodeIntruction::Const(NodeValue::I8(*int as i8))
+                        }
+                    },
                 },
                 token => panic!("Syntax Error: expected Value found {:?}", token)
             }
@@ -94,6 +170,18 @@ fn parse_value_instruction<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peeka
                 node_type: node_type
             }
         }
+        Token::Add => {
+            NodeIntruction::Add(node_type)
+        }
+        Token::Sub => {
+            NodeIntruction::Sub(node_type)
+        }
+        Token::Div => {
+            NodeIntruction::Div(node_type)
+        }
+        Token::Mul => {
+            NodeIntruction::Mul(node_type)
+        }
         token => panic!("Syntax Error: this {:?} does not go after a type identifier", token)
     }
 }
@@ -103,16 +191,22 @@ impl NodeIntruction {
         match tokens.next().unwrap() {
             Token::I32 => {
                 parse_value_instruction(tokens, NodeType::I32)
-            },
+            }
             Token::I16 => {
                 parse_value_instruction(tokens, NodeType::I16)
-            },
+            }
             Token::I64 => {
                 parse_value_instruction(tokens, NodeType::I64)
-            },
+            }
             Token::I8 => {
                 parse_value_instruction(tokens, NodeType::I8)
-            },
+            }
+            Token::F32 => {
+                parse_value_instruction(tokens, NodeType::F32)
+            }
+            Token::F64 => {
+                parse_value_instruction(tokens, NodeType::F64)
+            }
             Token::Call => {
                 match tokens.next().unwrap() {
                     Token::FuncIdent(ident) => NodeIntruction::Call(ident.clone()),

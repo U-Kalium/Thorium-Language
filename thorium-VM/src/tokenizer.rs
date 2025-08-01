@@ -9,6 +9,8 @@ pub enum Token {
     I64,
     I16,
     I8,
+    F32,
+    F64,
     Colon,
     FullStop,
     Const,
@@ -21,9 +23,13 @@ pub enum Token {
     Declare,
     Set,
     Get,
-    VarIdent(String)
+    VarIdent(String),
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Dash,
 }
-
 pub fn tokenize(content: String) -> Result<Vec<Token>, String> {
     let mut tokens = Vec::new();
     let mut content_chars = content.chars().peekable();
@@ -64,6 +70,12 @@ pub fn tokenize(content: String) -> Result<Vec<Token>, String> {
                 "i8" => {
                     tokens.push(Token::I8);
                 }
+                "f32" => {
+                    tokens.push(Token::F32);
+                }
+                "f64" => {
+                    tokens.push(Token::F64);
+                }
                 "const" => {
                     tokens.push(Token::Const);
                 }
@@ -76,6 +88,18 @@ pub fn tokenize(content: String) -> Result<Vec<Token>, String> {
                 "get" => {
                     tokens.push(Token::Get);
                 }
+                "add" => {
+                    tokens.push(Token::Add);
+                }
+                "sub" => {
+                    tokens.push(Token::Sub);
+                }
+                "mul" => {
+                    tokens.push(Token::Mul);
+                }
+                "div" => {
+                    tokens.push(Token::Div);
+                }   
                 unkown => return Err(format!("unkown key word {}", unkown).to_string())
             }
         } else if peeked.is_numeric() {
@@ -117,6 +141,10 @@ pub fn tokenize(content: String) -> Result<Vec<Token>, String> {
                     content_chars.next();
 
                     tokens.push(Token::StringLit(buffer.clone()));
+                }
+                '-' => {
+                    tokens.push(Token::Dash);
+                    content_chars.next();
                 }
                 unkown => return Err(format!("unkown punctuation word {}", unkown).to_string())
             }

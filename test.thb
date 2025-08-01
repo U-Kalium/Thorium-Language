@@ -1,0 +1,9 @@
+func $main:
+    f32.const -0.1
+
+func $start export "_start" :
+    call $main
+    f32.const -0.5
+    f32.add
+    f32.return
+

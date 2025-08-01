@@ -10,6 +10,8 @@ pub struct State {
     i64_stack: Vec<i64>,
     i16_stack: Vec<i16>,
     i8_stack: Vec<i8>,
+    f32_stack: Vec<f32>,
+    f64_stack: Vec<f64>,
 
     variables: HashMap<String, Option<NodeValue>>
 }
@@ -35,6 +37,8 @@ impl NodeIntruction {
                             NodeValue::I64(val) => state.i64_stack.push(*val),
                             NodeValue::I16(val) => state.i16_stack.push(*val),
                             NodeValue::I8(val) => state.i8_stack.push(*val),
+                            NodeValue::F32(val) => state.f32_stack.push(*val),
+                            NodeValue::F64(val) => state.f64_stack.push(*val),
                         };
                         None
                     },
@@ -69,6 +73,18 @@ impl NodeIntruction {
                             NodeType::I8 => {
                                 match state.i8_stack.pop() {
                                     Some(val) => Some(NodeValue::I8(val)),
+                                    None => None,
+                                }
+                            }
+                            NodeType::F32 => {
+                                match state.f32_stack.pop() {
+                                    Some(val) => Some(NodeValue::F32(val)),
+                                    None => None,
+                                }
+                            }
+                            NodeType::F64 => {
+                                match state.f64_stack.pop() {
+                                    Some(val) => Some(NodeValue::F64(val)),
                                     None => None,
                                 }
                             }
@@ -121,6 +137,20 @@ impl NodeIntruction {
                                 panic!("Tried Poping stack when it was empty")
                             }
                         },
+                        NodeType::F32 => {
+                            if let Some(stack_val) = state.f32_stack.pop() {
+                                *variable_val = Some(NodeValue::F32(stack_val))
+                            } else {
+                                panic!("Tried Poping stack when it was empty")
+                            }
+                        },
+                        NodeType::F64 => {
+                            if let Some(stack_val) = state.f64_stack.pop() {
+                                *variable_val = Some(NodeValue::F64(stack_val))
+                            } else {
+                                panic!("Tried Poping stack when it was empty")
+                            }
+                        },
                     }
                 }
                 None
@@ -161,6 +191,20 @@ impl NodeIntruction {
                                     panic!("Tried assigning type {:?} in variable of type i8", node_type)
                                 }
                             },
+                            NodeType::F32 => {
+                                if let NodeValue::F32(val) = val {
+                                    state.f32_stack.push(*val);
+                                } else {
+                                    panic!("Tried assigning type {:?} in variable of type F32", node_type)
+                                }
+                            },
+                            NodeType::F64 => {
+                                if let NodeValue::F64(val) = val {
+                                    state.f64_stack.push(*val);
+                                } else {
+                                    panic!("Tried assigning type {:?} in variable of type F64", node_type)
+                                }
+                            },
                         }
                     } else {
                         panic!("Variable {}, is empty yet tried to get from it", ident)
@@ -168,9 +212,79 @@ impl NodeIntruction {
                 }  
                 None
             },
+            NodeIntruction::Add(node_type) => {
+                process_numerical_op(state, node_type.clone(), NumericeOp::Add);
+                None
+            }
+            NodeIntruction::Sub(node_type) => {
+                process_numerical_op(state, node_type.clone(), NumericeOp::Sub);
+                None
+            }
+            NodeIntruction::Mul(node_type) => {
+                process_numerical_op(state, node_type.clone(), NumericeOp::Mul);
+                None
+            }
+            NodeIntruction::Div(node_type) => {
+                process_numerical_op(state, node_type.clone(), NumericeOp::Div);
+                None
+            }
         }
     }
 }
+
+enum NumericeOp {
+    Add,
+    Sub,
+    Mul,
+    Div
+}
+
+macro_rules! perform_operation {
+    ($operation:ident, $state:ident.$stack:ident) => {
+        let rhs = $state.$stack.pop().expect("Tried popping from empty track during numerical operation");
+        let lhs = $state.$stack.pop().expect("Tried popping from empty track during numerical operation");
+        $state.$stack.push(match $operation {
+            NumericeOp::Add => {
+                lhs + rhs
+            },
+            NumericeOp::Sub => {
+                lhs - rhs
+            },
+            NumericeOp::Mul => {
+                lhs * rhs
+            },
+            NumericeOp::Div => {
+                lhs / rhs
+            }
+        });
+
+    };
+}
+
+fn process_numerical_op(state: &mut State, node_type: NodeType, operation: NumericeOp) {
+    match node_type {
+        NodeType::I32 => {
+            perform_operation!(operation, state.i32_stack);
+        },
+        NodeType::I64 => {
+            perform_operation!(operation, state.i64_stack);
+        },
+        NodeType::I16 => {
+            perform_operation!(operation, state.i16_stack);
+        },
+        NodeType::I8 => {
+            perform_operation!(operation, state.i8_stack);
+        },
+        NodeType::F32 => {
+            perform_operation!(operation, state.f32_stack);
+
+        },
+        NodeType::F64 => {
+            perform_operation!(operation, state.f64_stack);
+        },
+    }
+}
+
 
 impl State {
     pub fn new(program: NodeProgram) -> Self {
@@ -182,6 +296,8 @@ impl State {
             i64_stack: Vec::new(),
             i16_stack: Vec::new(),
             i8_stack: Vec::new(),
+            f32_stack: Vec::new(),
+            f64_stack: Vec::new()
         }
     }
 
