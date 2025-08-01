@@ -7,7 +7,8 @@ pub struct NodeFunc {
 
 #[derive(Debug, Clone)]
 pub enum NodeIntruction {
-    Const(NodeValue),
+    Push(NodeValue),
+    Pop(NodeType),
     Call(String),
     Return(NodeType),
     Add(NodeType),

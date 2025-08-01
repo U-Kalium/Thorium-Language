@@ -13,7 +13,8 @@ pub enum Token {
     F64,
     Colon,
     FullStop,
-    Const,
+    Push,
+    Pop,
     Integer(i128),
     Return,
     Export,
@@ -76,8 +77,11 @@ pub fn tokenize(content: String) -> Result<Vec<Token>, String> {
                 "f64" => {
                     tokens.push(Token::F64);
                 }
-                "const" => {
-                    tokens.push(Token::Const);
+                "push" => {
+                    tokens.push(Token::Push);
+                }
+                "pop" => {
+                    tokens.push(Token::Pop);
                 }
                 "declare" => {
                     tokens.push(Token::Declare);

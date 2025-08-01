@@ -31,7 +31,7 @@ impl NodeFunc {
 impl NodeIntruction {
     fn run(&self, state: &mut State) -> Option<NodeValue> {
         match self {
-            NodeIntruction::Const(node_value) => {
+            NodeIntruction::Push(node_value) => {
                         match node_value {
                             NodeValue::I32(val) => state.i32_stack.push(*val),
                             NodeValue::I64(val) => state.i64_stack.push(*val),
@@ -226,6 +226,29 @@ impl NodeIntruction {
             }
             NodeIntruction::Div(node_type) => {
                 process_numerical_op(state, node_type.clone(), NumericeOp::Div);
+                None
+            }
+            NodeIntruction::Pop(node_type) => {
+                match node_type {
+                    NodeType::I32 =>  {
+                        state.i32_stack.pop();
+                    }
+                    NodeType::I64 =>  {
+                        state.i64_stack.pop();
+                    }
+                    NodeType::I16 =>  {
+                        state.i16_stack.pop();
+                    }
+                    NodeType::I8 =>  {
+                        state.i8_stack.pop();
+                    }
+                    NodeType::F32 =>  {
+                        state.f32_stack.pop();
+                    }
+                    NodeType::F64 =>  {
+                        state.f64_stack.pop();
+                    }
+                }
                 None
             }
         }

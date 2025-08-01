@@ -64,7 +64,7 @@ fn parse_value_instruction<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peeka
     }
 
     match tokens.next().unwrap() {
-        Token::Const => {
+        Token::Push => {
             let mut  is_negative = false;
             match tokens.peek().unwrap() {
                 Token::Dash => {
@@ -83,9 +83,9 @@ fn parse_value_instruction<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peeka
                                     Token::Integer(right_of_point) => {
                                         let float: f32 = format!("{}.{}", left_of_point, right_of_point).parse().expect("could not convert to float");
                                         if is_negative {
-                                            NodeIntruction::Const(NodeValue::F32(-float))
+                                            NodeIntruction::Push(NodeValue::F32(-float))
                                         } else {
-                                            NodeIntruction::Const(NodeValue::F32(float))
+                                            NodeIntruction::Push(NodeValue::F32(float))
                                         }
                                     }
                                     token => panic!("Syntax Error: expected . found {:?}", token)   
@@ -104,9 +104,9 @@ fn parse_value_instruction<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peeka
                                     Token::Integer(right_of_point) => {
                                         let float: f64 = format!("{}.{}", left_of_point, right_of_point).parse().expect("could not convert to float");
                                         if is_negative {
-                                            NodeIntruction::Const(NodeValue::F64(-float))
+                                            NodeIntruction::Push(NodeValue::F64(-float))
                                         } else {
-                                            NodeIntruction::Const(NodeValue::F64(float))
+                                            NodeIntruction::Push(NodeValue::F64(float))
                                         }
                                     }
                                     token => panic!("Syntax Error: expected . found {:?}", token)   
@@ -118,30 +118,30 @@ fn parse_value_instruction<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peeka
                     }
                     NodeType::I32 => {
                         if is_negative {
-                            NodeIntruction::Const(NodeValue::I32((*int as i32 ).neg()))
+                            NodeIntruction::Push(NodeValue::I32((*int as i32 ).neg()))
                         } else {
-                            NodeIntruction::Const(NodeValue::I32(*int as i32))
+                            NodeIntruction::Push(NodeValue::I32(*int as i32))
                         }
                     },
                     NodeType::I64 => {
                         if is_negative {
-                            NodeIntruction::Const(NodeValue::I64((*int as i64 ).neg()))
+                            NodeIntruction::Push(NodeValue::I64((*int as i64 ).neg()))
                         } else {
-                            NodeIntruction::Const(NodeValue::I64(*int as i64))
+                            NodeIntruction::Push(NodeValue::I64(*int as i64))
                         }
                     },
                     NodeType::I16 => {
                         if is_negative {
-                            NodeIntruction::Const(NodeValue::I16((*int as i16 ).neg()))
+                            NodeIntruction::Push(NodeValue::I16((*int as i16 ).neg()))
                         } else {
-                            NodeIntruction::Const(NodeValue::I16(*int as i16))
+                            NodeIntruction::Push(NodeValue::I16(*int as i16))
                         }
                     },
                     NodeType::I8 => {
                         if is_negative {
-                            NodeIntruction::Const(NodeValue::I8((*int as i8 ).neg()))
+                            NodeIntruction::Push(NodeValue::I8((*int as i8 ).neg()))
                         } else {
-                            NodeIntruction::Const(NodeValue::I8(*int as i8))
+                            NodeIntruction::Push(NodeValue::I8(*int as i8))
                         }
                     },
                 },
@@ -181,6 +181,9 @@ fn parse_value_instruction<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peeka
         }
         Token::Mul => {
             NodeIntruction::Mul(node_type)
+        }
+        Token::Pop => {
+            NodeIntruction::Pop(node_type)
         }
         token => panic!("Syntax Error: this {:?} does not go after a type identifier", token)
     }
