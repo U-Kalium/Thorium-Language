@@ -1,9 +1,9 @@
 func $main:
-    i32.push -0
+    f32.push -0.0
 
 func $start export "_start" :
     call $main
     f32.push -0.5
     f32.add
-    f32.return
+    return
 
