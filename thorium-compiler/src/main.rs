@@ -9,6 +9,7 @@ mod parser;
 fn main() {
     let command_line_args: Vec<String> = env::args().collect();
     let file_name = command_line_args[1].clone();
+    // let file_name = "examples/variables.th".to_string();
 
     let file_content = fs::read_to_string(file_name.clone())
         .expect("Should have been able to read the file");

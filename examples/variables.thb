@@ -1,3 +1,4 @@
+
 func $start export "_start" :
     call $main
     return
@@ -7,6 +8,6 @@ func $main:
     declare %b
     i32.push 69
     set %b
-    get %b
+   i32.push 10
     set %a
     get %a

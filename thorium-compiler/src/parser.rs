@@ -19,9 +19,14 @@ impl FunctionType {
     }
 }
 
+struct VariableProperties {
+    variable_type: String,
+    is_mutable: bool
+}
+
 struct Parser {
     functions: HashMap<String, FunctionType>,
-    types: HashSet<String>
+    types: HashSet<String>,
 }
 
 impl Parser {
@@ -94,6 +99,7 @@ impl Parser {
     }
 
     fn parse_scope<'a, I: Iterator<Item = &'a Token>>(&mut self, tokens: &mut Peekable<I>) -> String  {
+        let mut variables = HashMap::new();
         let mut scope = String::new();
         let mut token = tokens.next().unwrap();
         match &token.token_type {
@@ -102,9 +108,10 @@ impl Parser {
         }
         token = tokens.next().unwrap();
         while token.token_type != CloseCurlyBracket{
-            scope.push_str(&self.parse_statement(tokens));
-            token = tokens.next().unwrap();
+            scope.push_str(&self.parse_statement(tokens, &mut variables));
+            token = tokens.peek().unwrap();
         }
+        tokens.next();
         scope
     }
 
@@ -120,7 +127,7 @@ impl Parser {
         parsed_type
     }
 
-    fn parse_statement<'a, I: Iterator<Item = &'a Token>>(&mut self, tokens: &mut Peekable<I>) -> String {
+    fn parse_statement<'a, I: Iterator<Item = &'a Token>>(&mut self, tokens: &mut Peekable<I>, variables: &mut HashMap<String, VariableProperties>) -> String {
         let mut statement = String::new();
         let mut token = tokens.next().unwrap();
         match &token.token_type {
@@ -128,11 +135,85 @@ impl Parser {
                 token = tokens.next().unwrap();
                 match &token.token_type {
                     IntLit(number) => {
-                        statement.push_str(&format!("   i32.push {number}"));
+                        statement.push_str(&format!("    i32.push {number}\n"));
                     }
-                    t => panic!("Syntax Error: expected i32, found {t:?} at {}:{} ", token.line, token.column)
+                    Ident(ident) => {
+                        if !variables.contains_key(ident) {
+                            panic!("Error: Variable {ident} does not exist yet was used at {}:{}", token.line, token.column)
+                        }
+                        statement.push_str(&format!("    get %{ident}\n"));
+                    }
+                    t => panic!("Syntax Error: expected i32 after return, found {t:?} at {}:{} ", token.line, token.column)
                 }
             }
+            Var => {
+                token = tokens.next().unwrap();
+                match &token.token_type {
+                    Ident(ident) => {
+                        statement.push_str(&format!("    declare %{ident}\n"));
+                        token = tokens.next().unwrap();
+                        match &token.token_type {
+                            I32 => {
+                                let variable_properties = VariableProperties {
+                                    variable_type: "i32".to_string(),
+                                    is_mutable: true
+                                };
+                                variables.insert(ident.clone(), variable_properties);
+                                let peeked_token = tokens.peek().unwrap();
+                                match peeked_token.token_type {
+                                    NewLine => {},
+                                    SemiColon => {}
+                                    _ => statement.push_str(&self.parse_assignment(tokens, variables, ident))
+                                }
+                                
+                            }
+                            Ident(ident) => todo!("var decleration with custom types"),
+                            t => panic!("Syntax Error: expected type, found {t:?} at {}:{} ", token.line, token.column)
+
+                        }
+                    }
+                    t => panic!("Syntax Error: expected identifier, found {t:?} at {}:{} ", token.line, token.column)
+                }
+
+            }
+            Let => {
+                token = tokens.next().unwrap();
+                match &token.token_type {
+                    Ident(ident) => {
+                        statement.push_str(&format!("    declare %{ident}\n"));
+                        token = tokens.next().unwrap();
+                        match &token.token_type {
+                            I32 => {
+                                let variable_properties = VariableProperties {
+                                    variable_type: "i32".to_string(),
+                                    is_mutable: false
+                                };
+                                variables.insert(ident.clone(), variable_properties);
+                                let peeked_token = tokens.peek().unwrap();
+                                match peeked_token.token_type {
+                                    NewLine => {},
+                                    SemiColon => {}
+                                    _ => statement.push_str(&self.parse_assignment(tokens, variables, ident))
+                                }
+                                
+                            }
+                            Ident(ident) => todo!("let decleration with custom types"),
+                            t => panic!("Syntax Error: expected type, found {t:?} at {}:{} ", token.line, token.column)
+
+                        }
+                    }
+                    t => panic!("Syntax Error: expected identifier, found {t:?} at {}:{} ", token.line, token.column)
+                }
+
+            }
+            Ident(ident) => {
+                let variable_properties = variables.get(ident).unwrap();
+                if !variable_properties.is_mutable {
+                    panic!("Error: tried mutating variable {ident} but it is immutable, found at {}:{}", token.line, token.column)
+                }
+                statement.push_str(&self.parse_assignment(tokens, variables, ident));
+            }
+
             t => panic!("Syntax Error: expected statement, found {t:?} at {}:{} ", token.line, token.column)
         }
         token = tokens.next().unwrap();
@@ -142,6 +223,39 @@ impl Parser {
             t => panic!("Syntax Error: expected newline or semicolon, found {t:?} at {}:{} ", token.line, token.column)
         }
         statement
+    }
+
+    fn parse_assignment<'a, I: Iterator<Item = &'a Token>>(&mut self, tokens: &mut Peekable<I>, variables: &mut HashMap<String, VariableProperties>, variable: &String) -> String {
+        let mut assignment = String::new();
+        let mut peeked_token = tokens.peek().unwrap();
+        match &peeked_token.token_type {
+            OpenCurlyBracket => assignment.push_str(&self.parse_scope(tokens)),
+            Equal => {
+                tokens.next().unwrap();
+                let mut token = tokens.next().unwrap();
+                let variable_type = variables.get(variable).unwrap().variable_type.clone();
+                match &token.token_type {
+                    IntLit(num) => {
+                        assignment.push_str(&format!("   {variable_type}.push {num}\n"))
+                    }
+                    Ident(ident) => {
+                        if let Some(variable_properties) = variables.get(ident) {
+                            let variable_type = variables.get(variable).unwrap().variable_type.clone();
+                            if variable_type == variable_properties.variable_type {
+                                assignment.push_str(&format!("    get %{ident}\n"));
+                            }
+                        } else {
+                            panic!("Error: tried assigning an unkown identifier {ident} to variable {variable}");
+
+                        }
+                    }
+                    t => panic!("Syntax Error: expected int or variable, found {t:?} at {}:{} ", token.line, token.column)
+                }   
+            }
+            t => panic!("Syntax Error: expected {{}} or = , found {t:?} at {}:{} ", peeked_token.line, peeked_token.column)
+        }
+        assignment.push_str(&format!("    set %{variable}\n"));
+        assignment
     }
 }
 
