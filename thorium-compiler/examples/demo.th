@@ -25,20 +25,15 @@ let bar f32 {
 // Functions and Lambdas
 
 /*
-    There is no distinction between the two. as a function would be a named lambda 
-    but a lambda could be named if assigned to a variable
-
-    so functions are simply variables with the func type typed in
+    lambdas are simply functions without a identifier. 
 */
 
-// note although the parameters are named the type is `(i32, i32) i32`
-let add (lhs i32, rhs i32) i32 {    // the function signiture takes the place of the type
+fn add (lhs i32, rhs i32) i32 {
     return lhs + rhs
 }
-// as func sig is the type and (i32, i32) i32 is a valid type 
 // writing a function like this without named arguments
 // defaults the arguments to arg0, arg1 ....
-let minus (i32, i32) i32 {
+fn minus (i32, i32) i32 {
     return arg0 - arg1
 }
 
@@ -117,15 +112,15 @@ type Person struct {
 
 // the type of this "funciton" is <&mut Person>(int)
 // the ident is technically something like Person.age so you can have other age functions
-let age_up <p &mut Person> (years int) {                   // Simillar to Go's reciever syntax although due to funcs == variables we put it after ident and in <>
+fn age_up <p &mut Person> (years int) {                   // Simillar to Go's reciever syntax although due to funcs == variables we put it after ident and in <>
     p.age += years
 }
 
 mike.age_up(10)
 
 interface Ageable {                                     // An interface can be a list of methods and properties with `self` being a replacement to whatever the type is
-    age_up<&mut self>(int)
-    age int
+    fn age_up<&mut self>(int)                           // methods need to be prefixed with `fn`
+    age int                                             // properties don't have to be prefaced
 }
 
 /*
@@ -133,7 +128,7 @@ interface Ageable {                                     // An interface can be a
     As person has a method with the same name and simillar type it implicitly implements the interface 
 */
 
-let age_all(things []Ageable) {                         // although this looks close to Go's interfaces this will function more like rust generics as all objects in things will be of the same type
+fn age_all(things []Ageable) {                          // although this looks close to Go's interfaces this will function more like rust generics as all objects in things will be of the same type
 
 }
 
@@ -141,11 +136,11 @@ interface Growable {
     grow<&mut self>(f32)
 }
 
-let grow <p &mut Person> (length f32) {
+fn grow <p &mut Person> (length f32) {
     p.height += length
 }
 
-let age_and_grow(things []Ageable:Growable) {           // If you need something to satisfy multiple Interfaces
+fn age_and_grow(things []Ageable:Growable) {            // If you need something to satisfy multiple Interfaces
 
 }
 
@@ -158,7 +153,7 @@ interface Developable {                                 // Alternatively you cou
 
 /*
     Stolen from jai. rather than allow for direct inheritence you can create a strruct with one member being the "parent" type. 
-    but by using the `has` keyowrd the members of the "parent" act like regular members. This also allows for otehr syntax sugering
+    but by using the `has` keyowrd the members of the "parent" act like regular members. This also allows for other syntax sugering
 */
 
 type Entity struct {                                    // can be thought of as a base class
@@ -166,7 +161,7 @@ type Entity struct {                                    // can be thought of as 
     is_shown bool
 }
 
-let update<&mut Entity>() {
+fn update<&mut Entity>() {
 
 }
 
