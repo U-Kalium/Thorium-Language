@@ -15,12 +15,24 @@ pub enum NodeIntruction {
     Sub(NodeType),
     Div(NodeType),
     Mul(NodeType),
+    Rem(NodeType),
+    And(NodeType),
+    Or(NodeType),
+    Xor(NodeType),
+    Eq(NodeType),
+    Neq(NodeType),
+    Gte(NodeType),
+    Gt(NodeType),
+    Lte(NodeType),
+    Lt(NodeType),
+    Max(NodeType),
+    Min(NodeType),
     Declare { variable: NodeVariable },
     Set { variable: NodeVariable },
     Get { variable: NodeVariable },
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum NodeValue {
     I32(i32),
     I64(i64),

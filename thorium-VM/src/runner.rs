@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::syntax_tree::{NodeFunc, NodeIntruction, NodeProgram, NodeType, NodeValue};
+use crate::{parser::parse_tokens, syntax_tree::{self, NodeFunc, NodeIntruction, NodeProgram, NodeType, NodeValue}, tokenizer::tokenize};
 
 #[derive(Clone)]
 pub struct State {
@@ -96,6 +96,54 @@ impl NodeIntruction {
                 process_numerical_op(state, node_type.clone(), NumericeOp::Div);
                 None
             }
+            NodeIntruction::Rem(node_type) => {
+                process_numerical_op(state, node_type.clone(), NumericeOp::Rem );
+                None
+            }
+            NodeIntruction::And(node_type) => {
+                process_numerical_op(state, node_type.clone(), NumericeOp::And );
+                None
+            }
+            NodeIntruction::Or(node_type) => {
+                process_numerical_op(state, node_type.clone(), NumericeOp::Or );
+                None
+            }
+            NodeIntruction::Xor(node_type) => {
+                process_numerical_op(state, node_type.clone(), NumericeOp::Xor );
+                None
+            }
+            NodeIntruction::Eq(node_type) => {
+                process_numerical_op(state, node_type.clone(), NumericeOp::Eq );
+                None
+            }
+            NodeIntruction::Neq(node_type) => {
+                process_numerical_op(state, node_type.clone(), NumericeOp::Neq );
+                None
+            }
+            NodeIntruction::Gte(node_type) => {
+                process_numerical_op(state, node_type.clone(), NumericeOp::Gte );
+                None
+            }
+            NodeIntruction::Gt(node_type) => {
+                process_numerical_op(state, node_type.clone(), NumericeOp::Gt );
+                None
+            }
+            NodeIntruction::Lte(node_type) => {
+                process_numerical_op(state, node_type.clone(), NumericeOp::Lte );
+                None
+            }
+            NodeIntruction::Lt(node_type) => {
+                process_numerical_op(state, node_type.clone(), NumericeOp::Lt );
+                None
+            }
+            NodeIntruction::Max(node_type) => {
+                process_numerical_op(state, node_type.clone(), NumericeOp::Max );
+                None
+            }
+            NodeIntruction::Min(node_type) => {
+                process_numerical_op(state, node_type.clone(), NumericeOp::Min );
+                None
+            }
             NodeIntruction::Pop => {
                 if state.stack.pop().is_none() {
                     panic!("tried popping when the stack is empty")
@@ -106,20 +154,65 @@ impl NodeIntruction {
     }
 }
 
+#[derive(Debug)]
 enum NumericeOp {
     Add,
     Sub,
     Mul,
     Div,
+    Rem,
+    And,
+    Or,
+    Xor,
+    Eq,
+    Neq,
+    Gte,
+    Gt,
+    Lte,
+    Lt,
+    Max,
+    Min,
 }
 
+
+
 macro_rules! perform_operation {
-    ($operation:ident, $rhs:ident, $lhs:ident) => {
+    (for int $type:ty, $operation:ident, $rhs:ident, $lhs:ident) => {
         match $operation {
             NumericeOp::Add => $lhs + $rhs,
             NumericeOp::Sub => $lhs - $rhs,
             NumericeOp::Mul => $lhs * $rhs,
             NumericeOp::Div => $lhs / $rhs,
+            NumericeOp::Rem => $lhs % $rhs,
+            NumericeOp::And => $lhs & $rhs,
+            NumericeOp::Or => $lhs | $rhs,
+            NumericeOp::Xor => $lhs ^ $rhs,
+            NumericeOp::Eq => ($lhs == $rhs) as $type,
+            NumericeOp::Neq => ($lhs != $rhs) as $type,
+            NumericeOp::Gte => ($lhs >= $rhs) as $type,
+            NumericeOp::Gt => ($lhs > $rhs) as $type,
+            NumericeOp::Lte => ($lhs <= $rhs) as $type,
+            NumericeOp::Lt => ($lhs < $rhs) as $type,
+            NumericeOp::Max => $lhs.max($rhs),
+            NumericeOp::Min => $lhs.min($rhs),
+        }
+    };
+    (for float $type:ty, $operation:ident, $rhs:ident, $lhs:ident) => {
+        match $operation {
+            NumericeOp::Add => $lhs + $rhs,
+            NumericeOp::Sub => $lhs - $rhs,
+            NumericeOp::Mul => $lhs * $rhs,
+            NumericeOp::Div => $lhs / $rhs,
+            NumericeOp::Rem => $lhs % $rhs,
+            NumericeOp::Eq => ($lhs == $rhs) as i32 as $type,
+            NumericeOp::Neq => ($lhs != $rhs) as i32 as $type,
+            NumericeOp::Gte => ($lhs >= $rhs) as i32 as $type,
+            NumericeOp::Gt => ($lhs > $rhs) as i32 as $type,
+            NumericeOp::Lte => ($lhs <= $rhs) as i32 as $type,
+            NumericeOp::Lt => ($lhs < $rhs) as i32 as $type,
+            NumericeOp::Max => $lhs.max($rhs),
+            NumericeOp::Min => $lhs.min($rhs),
+            operation => panic!("operation {operation:?} can not be used on a float")
         }
     };
 }
@@ -138,6 +231,7 @@ fn process_numerical_op(state: &mut State, node_type: NodeType, operation: Numer
         NodeType::I32 => {
             if let (NodeValue::I32(rhs_val), NodeValue::I32(lhs_val)) = (rhs, lhs) {
                 state.stack.push(NodeValue::I32(perform_operation!(
+                    for int i32,
                     operation, rhs_val, lhs_val
                 )))
             } else {
@@ -147,6 +241,7 @@ fn process_numerical_op(state: &mut State, node_type: NodeType, operation: Numer
         NodeType::I64 => {
             if let (NodeValue::I64(rhs_val), NodeValue::I64(lhs_val)) = (rhs, lhs) {
                 state.stack.push(NodeValue::I64(perform_operation!(
+                    for int i64,
                     operation, rhs_val, lhs_val
                 )))
             } else {
@@ -156,6 +251,7 @@ fn process_numerical_op(state: &mut State, node_type: NodeType, operation: Numer
         NodeType::I16 => {
             if let (NodeValue::I16(rhs_val), NodeValue::I16(lhs_val)) = (rhs, lhs) {
                 state.stack.push(NodeValue::I16(perform_operation!(
+                    for int i16,
                     operation, rhs_val, lhs_val
                 )))
             } else {
@@ -165,6 +261,7 @@ fn process_numerical_op(state: &mut State, node_type: NodeType, operation: Numer
         NodeType::I8 => {
             if let (NodeValue::I8(rhs_val), NodeValue::I8(lhs_val)) = (rhs, lhs) {
                 state.stack.push(NodeValue::I8(perform_operation!(
+                    for int i8,
                     operation, rhs_val, lhs_val
                 )))
             } else {
@@ -174,6 +271,7 @@ fn process_numerical_op(state: &mut State, node_type: NodeType, operation: Numer
         NodeType::F32 => {
             if let (NodeValue::F32(rhs_val), NodeValue::F32(lhs_val)) = (rhs, lhs) {
                 state.stack.push(NodeValue::F32(perform_operation!(
+                    for float f32,
                     operation, rhs_val, lhs_val
                 )))
             } else {
@@ -183,6 +281,7 @@ fn process_numerical_op(state: &mut State, node_type: NodeType, operation: Numer
         NodeType::F64 => {
             if let (NodeValue::F64(rhs_val), NodeValue::F64(lhs_val)) = (rhs, lhs) {
                 state.stack.push(NodeValue::F64(perform_operation!(
+                    for float f64,
                     operation, rhs_val, lhs_val
                 )))
             } else {
@@ -191,29 +290,6 @@ fn process_numerical_op(state: &mut State, node_type: NodeType, operation: Numer
         }
     }
 
-    match (rhs, lhs) {
-        (NodeValue::F32(rhs_val), NodeValue::F32(lhs_val)) => state.stack.push(NodeValue::F32(
-            perform_operation!(operation, rhs_val, lhs_val),
-        )),
-        (NodeValue::F64(rhs_val), NodeValue::F64(lhs_val)) => state.stack.push(NodeValue::F64(
-            perform_operation!(operation, rhs_val, lhs_val),
-        )),
-        (NodeValue::I32(rhs_val), NodeValue::I32(lhs_val)) => state.stack.push(NodeValue::I32(
-            perform_operation!(operation, rhs_val, lhs_val),
-        )),
-        (NodeValue::I64(rhs_val), NodeValue::I64(lhs_val)) => state.stack.push(NodeValue::I64(
-            perform_operation!(operation, rhs_val, lhs_val),
-        )),
-        (NodeValue::I16(rhs_val), NodeValue::I16(lhs_val)) => state.stack.push(NodeValue::I16(
-            perform_operation!(operation, rhs_val, lhs_val),
-        )),
-        (NodeValue::I8(rhs_val), NodeValue::I8(lhs_val)) => state.stack.push(NodeValue::I8(
-            perform_operation!(operation, rhs_val, lhs_val),
-        )),
-        (rhs_val, lhs_val) => {
-            panic!("tried applying operation but rhs was {rhs_val:?} and lhs was {lhs_val:?}")
-        }
-    }
 }
 
 impl State {
@@ -226,7 +302,7 @@ impl State {
         }
     }
 
-    pub fn run(&mut self) {
+    pub fn run(&mut self) -> Option<NodeValue> {
         let mut entry_point = None;
         let program = self.program.clone();
 
@@ -238,8 +314,17 @@ impl State {
         }
         if let Some(func) = entry_point {
             if let Some(val) = func.run(self) {
-                println!("returned: {:?}", val)
+                // println!("returned: {:?}", val)
+                return Some(val)
             }
         }
+        None
     }
+}
+
+pub fn run_state_from_str(string: &str) -> Option<NodeValue> {
+    let tokens = tokenize(string.to_string()).unwrap();
+    let syntax_tree = parse_tokens(&tokens);
+    let mut state = State::new(syntax_tree);
+    state.run()
 }

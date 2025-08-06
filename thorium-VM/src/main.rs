@@ -9,12 +9,15 @@ mod parser;
 mod runner;
 mod syntax_tree;
 mod tokenizer;
+mod tests;
 
 fn main() {
     // let command_line_args: Vec<String> = env::args().collect();
 
     // let file_content = fs::read_to_string(command_line_args[1].clone())
     //     .expect("Should have been able to read the file");
+
+
 
     let file_content =
         fs::read_to_string("test.thb").expect("Should have been able to read the file");
@@ -26,5 +29,5 @@ fn main() {
 
     let mut state = State::new(syntax_tree);
 
-    state.run();
+    println!("returned: {:?}", state.run())
 }

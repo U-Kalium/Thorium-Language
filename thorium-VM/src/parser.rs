@@ -165,15 +165,29 @@ fn parse_value_instruction<'a, I: Iterator<Item = &'a Token>>(
                         }
                     }
                 },
+                
                 token => panic!("Syntax Error: expected Value found {:?}", token),
             }
-            // value);
+            // value)
+
         }
 
         Token::Word(WordToken::Add) => NodeIntruction::Add(node_type),
         Token::Word(WordToken::Sub) => NodeIntruction::Sub(node_type),
         Token::Word(WordToken::Div) => NodeIntruction::Div(node_type),
         Token::Word(WordToken::Mul) => NodeIntruction::Mul(node_type),
+        Token::Word(WordToken::Rem) => NodeIntruction::Rem(node_type), 
+        Token::Word(WordToken::And) => NodeIntruction::And(node_type), 
+        Token::Word(WordToken::Or) => NodeIntruction::Or(node_type), 
+        Token::Word(WordToken::Xor) => NodeIntruction::Xor(node_type), 
+        Token::Word(WordToken::Eq) => NodeIntruction::Eq(node_type), 
+        Token::Word(WordToken::Neq) => NodeIntruction::Neq(node_type), 
+        Token::Word(WordToken::Gte) => NodeIntruction::Gte(node_type), 
+        Token::Word(WordToken::Gt) => NodeIntruction::Gt(node_type), 
+        Token::Word(WordToken::Lte) => NodeIntruction::Lte(node_type), 
+        Token::Word(WordToken::Lt) => NodeIntruction::Lt(node_type), 
+        Token::Word(WordToken::Max) => NodeIntruction::Max(node_type), 
+        Token::Word(WordToken::Min) => NodeIntruction::Min(node_type), 
         token => panic!(
             "Syntax Error: this {:?} does not go after a type identifier",
             token

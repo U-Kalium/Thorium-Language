@@ -51,7 +51,8 @@ pub enum WordToken {
 
 pub fn tokenize(content: String) -> Result<Vec<Token>, String> {
     let mut tokens = Vec::new();
-    let mut content_chars = content.chars().peekable();
+    let binding = content.to_lowercase();
+    let mut content_chars = binding.chars().peekable();
 
     while content_chars.peek().is_some() {
         let peeked = content_chars.peek().unwrap();
