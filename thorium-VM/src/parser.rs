@@ -57,6 +57,9 @@ fn parse_instructions<'a, I: Iterator<Item = &'a Token>>(
         Token::Word(WordToken::Jmp) => true,
         Token::Word(WordToken::Jpz) => true,
         Token::Word(WordToken::Return) => true,
+        Token::Word(WordToken::Get) => true,
+        Token::Word(WordToken::Set) => true,
+        Token::Word(WordToken::Declare) => true,
         Token::LabelIdent(label_name) => {
             // tokens.next();
             labels.insert(label_name.clone(), index);
@@ -270,6 +273,7 @@ impl NodeVariable {
 
 pub fn parse_tokens(tokens: &Vec<Token>) -> NodeProgram {
     let mut functions = Vec::new();
+    let mut variables = HashMap::new();
     let mut tokens_iter = tokens.iter().peekable();
 
     while tokens_iter.peek().is_some() {
@@ -285,5 +289,5 @@ pub fn parse_tokens(tokens: &Vec<Token>) -> NodeProgram {
         }
     }
 
-    NodeProgram { funcs: functions }
+    NodeProgram { funcs: functions, variables }
 }

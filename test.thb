@@ -1,7 +1,11 @@
 
 func $start export "_start" :
+    declare %a
     i32.push 10
     @loop
+    set %a
+    get %a
+    // comement test
     i32.push 1
     i32.sub
     jmp @loop

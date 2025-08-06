@@ -73,6 +73,7 @@ pub enum NodeType {
 #[derive(Debug, Clone)]
 pub struct NodeProgram {
     pub funcs: Vec<NodeFunc>,
+    pub variables: HashMap<String, Option<NodeValue>>
 }
 
 #[derive(Debug, Clone)]

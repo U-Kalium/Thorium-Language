@@ -139,6 +139,20 @@ pub fn tokenize(content: String) -> Result<Vec<Token>, String> {
                     tokens.push(Token::Dash);
                     content_chars.next();
                 }
+                // detecting comments
+                '/' => {
+                    content_chars.next();
+                    if let Some(char) = content_chars.peek() {
+                        if *char == '/' {
+                            content_chars.next();
+                            while content_chars.peek().is_some_and(|char| *char != '\n') {
+                                content_chars.next();
+                            }
+                        } else {
+                            panic!("syntax error expected / for a comment but found {char}");
+                        }
+                    }
+                }
                 unkown => return Err(format!("unkown punctuation word {}", unkown).to_string()),
             }
         }
