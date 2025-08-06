@@ -1,0 +1,206 @@
+// Variable decleration
+
+let a f32       // let for constant
+
+var b f32       // var for mutable
+
+var c           // type can be infered
+
+
+// Variable assignment
+
+b = 3.0         // either done by an equal operand
+
+c {             // or simply a body `{}` with a return statement
+    return 4
+}
+
+//  variable decleration and assignment
+
+let foo string = "hello world"
+let bar f32 {
+    return 3.14
+}
+
+// Functions and Lambdas
+
+/*
+    There is no distinction between the two. as a function would be a named lambda 
+    but a lambda could be named if assigned to a variable
+
+    so functions are simply variables with the func type typed in
+*/
+
+// note although the parameters are named the type is `(i32, i32) i32`
+let add (lhs i32, rhs i32) i32 {    // the function signiture takes the place of the type
+    return lhs + rhs
+}
+// as func sig is the type and (i32, i32) i32 is a valid type 
+// writing a function like this without named arguments
+// defaults the arguments to arg0, arg1 ....
+let minus (i32, i32) i32 {
+    return arg0 - arg1
+}
+
+// Primitive types
+
+// Integers
+let a int                           // is the same as i32 by default it is used when not specific about length
+let b i128                          // 128 bit signed integer `u128` for unsigned
+let c i64                           // 64 bit signed integer `u64` for unsigned
+let d i32                           // 32 bit signed integer `u32` for unsigned
+let e i16                           // 16 bit signed integer `u16` for unsigend
+let f i8                            // 8  bit signed integer `u8 ` for unsigend
+
+// Floats
+let g float                         // is the same as f32 by default it is used when not specific about length
+let h f32                           // 32 bit float
+let i f64                           // 64 bit float
+
+// Char
+let j char = 'j'                    // utf 8 character denoted by single qoutes
+
+// Arrays
+/*
+    the type of the array is declared with [] on the left
+    accessing it would have [] on the right e.g. numbers[2]
+*/
+let k [dyn]int                      // dynamic array denoted by [dyn]
+let l [10]int                       // fixed size arrat denoted by [int]
+
+// Type declerations
+
+type number i32             // the ident after `type` can now be used anywhere a type is usually placed as it is like an alies to f32 (note: it is a destinct type from f32)
+
+// Structs
+
+let john struct {           // this would be declaring a variable with an anonymouse struct type. 
+    age int
+    height f32
+    name string
+}
+
+type Person struct {        // Here we alias the struct as Person
+    age int
+    height f32
+    name string
+}
+
+let Joe Person              // this is almost the same as john but the types would not be the same
+
+let mike {                  // this will be infered to Person although if another struct has the same members type parameter will be needed
+    age     = 10
+    height  = 1.7
+    name    = "mike
+}
+
+// default values
+
+let john struct {           // this is how you would most likely assign values to an anonymouse struct
+    age = 10
+    height f32 = 1.9
+    name = "john"
+}
+
+type Person struct {
+    age int = 0
+    height = 0.1
+    name
+}
+
+// Methods, Generics and Interfaces
+
+/*
+    interfaces are not types and therefore can not be used in type declerations
+    they are mainly used for generics.
+*/
+
+// the type of this "funciton" is <&mut Person>(int)
+// the ident is technically something like Person.age so you can have other age functions
+let age_up <p &mut Person> (years int) {                   // Simillar to Go's reciever syntax although due to funcs == variables we put it after ident and in <>
+    p.age += years
+}
+
+mike.age_up(10)
+
+interface Ageable {                                     // An interface can be a list of methods and properties with `self` being a replacement to whatever the type is
+    age_up<&mut self>(int)
+    age int
+}
+
+/*
+    Simillar to Go you do not have to explicitly implement the interface. 
+    As person has a method with the same name and simillar type it implicitly implements the interface 
+*/
+
+let age_all(things []Ageable) {                         // although this looks close to Go's interfaces this will function more like rust generics as all objects in things will be of the same type
+
+}
+
+interface Growable {
+    grow<&mut self>(f32)
+}
+
+let grow <p &mut Person> (length f32) {
+    p.height += length
+}
+
+let age_and_grow(things []Ageable:Growable) {           // If you need something to satisfy multiple Interfaces
+
+}
+
+interface Developable {                                 // Alternatively you could create another interface with the a list of interfaces
+    Growable
+    Ageable
+}
+
+// Inheritence/Composition
+
+/*
+    Stolen from jai. rather than allow for direct inheritence you can create a strruct with one member being the "parent" type. 
+    but by using the `has` keyowrd the members of the "parent" act like regular members. This also allows for otehr syntax sugering
+*/
+
+type Entity struct {                                    // can be thought of as a base class
+    id i64
+    is_shown bool
+}
+
+let update<&mut Entity>() {
+
+}
+
+type Character struct {
+    has Entity
+    name string
+}
+
+/* Equivelent to
+    type Character struct {
+        enitiy Entity
+        name string
+    }
+*/
+
+let character1 Character {                      // Initialised as if Entity members are part of Charcter
+    id = 0
+    is_shown = true
+    name = "john"
+}
+
+character1.update()
+
+/* Equivelent to
+
+    let charcter1 Chracter {
+        entity Entity {
+            id = 0
+            is_shown = true
+        }
+        name = "john"
+    }
+
+    character1.entity.update()
+
+*/
+
