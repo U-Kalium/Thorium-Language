@@ -4,6 +4,7 @@ use thorium_macros::tokenize_words;
 pub enum Token {
     Word(WordToken),
     FuncIdent(String),
+    LabelIdent(String),
     Colon,
     FullStop,
     Number(i128),
@@ -47,6 +48,8 @@ pub enum WordToken {
     Lt,
     Max,
     Min,
+    Jmp,
+    Jpz,
 }
 
 pub fn tokenize(content: String) -> Result<Vec<Token>, String> {
@@ -102,6 +105,16 @@ pub fn tokenize(content: String) -> Result<Vec<Token>, String> {
 
                     tokens.push(Token::FuncIdent(buffer.clone()));
                 }
+                '@' => {
+                    content_chars.next(); 
+                    while content_chars
+                        .peek()
+                        .is_some_and(|char| char.is_alphanumeric())
+                    {
+                        buffer.push(content_chars.next().unwrap());
+                    }
+                    tokens.push(Token::LabelIdent(buffer.clone()));
+                }
                 '%' => {
                     content_chars.next();
                     while content_chars
@@ -135,3 +148,8 @@ pub fn tokenize(content: String) -> Result<Vec<Token>, String> {
 
     Ok(tokens)
 }
+
+
+// struct Tokenizer {
+
+// }

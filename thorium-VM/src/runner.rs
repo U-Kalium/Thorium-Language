@@ -17,24 +17,47 @@ pub struct State {
     variables: HashMap<String, Option<NodeValue>>,
 }
 
+enum InstructionReturn {
+    Some(NodeValue),
+    None,
+    Jump(String)
+}
+
 impl NodeFunc {
     fn run(&self, state: &mut State) -> Option<NodeValue> {
-        for instruction in &self.intructions {
-            match instruction.run(state) {
-                Some(val) => return Some(val),
-                None => {}
+        let mut index = 0;
+        while index < self.intructions.len() {
+            match self.intructions[index].run(state) {
+                InstructionReturn::Some(val) => return Some(val),
+                InstructionReturn::None => {},
+                InstructionReturn::Jump(label) => {
+                    if let Some(label_index) =  self.labels.get(&label){
+                        index = *label_index;
+                        continue;
+                    }
+                }
             }
+            index += 1;
         }
         None
+
+        // for instruction in &self.intructions {
+        //     match instruction.run(state) {
+        //         Some(val) => return Some(val),
+        //         None => {}
+        //     }
+        // }
+        // None
     }
 }
 
 impl NodeIntruction {
-    fn run(&self, state: &mut State) -> Option<NodeValue> {
+    fn run(&self, state: &mut State) -> InstructionReturn { 
         match self {
             NodeIntruction::Push(node_value) => {
+
                 state.stack.push(node_value.clone());
-                None
+                InstructionReturn::None
             }
             NodeIntruction::Call(ident) => {
                 let state_clone = state.clone();
@@ -43,11 +66,11 @@ impl NodeIntruction {
                     .get(ident)
                     .expect(&format!("could not find function {:?}", ident));
                 func.run(state);
-                None
+                InstructionReturn::None
             }
             NodeIntruction::Return => match state.stack.pop() {
-                Some(val) => Some(val),
-                None => None,
+                Some(val) => InstructionReturn::Some(val),
+                None => InstructionReturn::None,
             },
             NodeIntruction::Declare { variable } => {
                 let ident = variable.ident.clone();
@@ -56,7 +79,7 @@ impl NodeIntruction {
                 }
 
                 state.variables.insert(ident, None);
-                None
+                InstructionReturn::None
             }
             NodeIntruction::Set { variable } => {
                 let ident = variable.ident.clone();
@@ -67,7 +90,7 @@ impl NodeIntruction {
                         panic!("Tried Poping stack when it was empty")
                     }
                 }
-                None
+                InstructionReturn::None
             }
             NodeIntruction::Get { variable } => {
                 let ident = variable.ident.clone();
@@ -78,77 +101,99 @@ impl NodeIntruction {
                         panic!("Variable {}, is empty yet tried to get from it", ident)
                     }
                 }
-                None
+                InstructionReturn::None
             }
             NodeIntruction::Add(node_type) => {
                 process_numerical_op(state, node_type.clone(), NumericeOp::Add);
-                None
+                InstructionReturn::None
             }
             NodeIntruction::Sub(node_type) => {
                 process_numerical_op(state, node_type.clone(), NumericeOp::Sub);
-                None
+                InstructionReturn::None
             }
             NodeIntruction::Mul(node_type) => {
                 process_numerical_op(state, node_type.clone(), NumericeOp::Mul);
-                None
+                InstructionReturn::None
             }
             NodeIntruction::Div(node_type) => {
                 process_numerical_op(state, node_type.clone(), NumericeOp::Div);
-                None
+                InstructionReturn::None
             }
             NodeIntruction::Rem(node_type) => {
                 process_numerical_op(state, node_type.clone(), NumericeOp::Rem );
-                None
+                InstructionReturn::None
             }
             NodeIntruction::And(node_type) => {
                 process_numerical_op(state, node_type.clone(), NumericeOp::And );
-                None
+                InstructionReturn::None
             }
             NodeIntruction::Or(node_type) => {
                 process_numerical_op(state, node_type.clone(), NumericeOp::Or );
-                None
+                InstructionReturn::None
             }
             NodeIntruction::Xor(node_type) => {
                 process_numerical_op(state, node_type.clone(), NumericeOp::Xor );
-                None
+                InstructionReturn::None
             }
             NodeIntruction::Eq(node_type) => {
                 process_numerical_op(state, node_type.clone(), NumericeOp::Eq );
-                None
+                InstructionReturn::None
             }
             NodeIntruction::Neq(node_type) => {
                 process_numerical_op(state, node_type.clone(), NumericeOp::Neq );
-                None
+                InstructionReturn::None
             }
             NodeIntruction::Gte(node_type) => {
                 process_numerical_op(state, node_type.clone(), NumericeOp::Gte );
-                None
+                InstructionReturn::None
             }
             NodeIntruction::Gt(node_type) => {
                 process_numerical_op(state, node_type.clone(), NumericeOp::Gt );
-                None
+                InstructionReturn::None
             }
             NodeIntruction::Lte(node_type) => {
                 process_numerical_op(state, node_type.clone(), NumericeOp::Lte );
-                None
+                InstructionReturn::None
             }
             NodeIntruction::Lt(node_type) => {
                 process_numerical_op(state, node_type.clone(), NumericeOp::Lt );
-                None
+                InstructionReturn::None
             }
             NodeIntruction::Max(node_type) => {
                 process_numerical_op(state, node_type.clone(), NumericeOp::Max );
-                None
+                InstructionReturn::None
             }
             NodeIntruction::Min(node_type) => {
                 process_numerical_op(state, node_type.clone(), NumericeOp::Min );
-                None
+                InstructionReturn::None
             }
             NodeIntruction::Pop => {
                 if state.stack.pop().is_none() {
                     panic!("tried popping when the stack is empty")
                 }
-                None
+                InstructionReturn::None
+            }
+            NodeIntruction::Jmp(label) => {
+                if let Some(value) = state.stack.last() {
+                    if !value.is_zero() {
+                        InstructionReturn::Jump(label.clone())
+                    } else {
+                        InstructionReturn::None
+                    }
+                } else {
+                    panic!("tried popping when the stack is empty during jmp operation")
+                }
+            }
+            NodeIntruction::Jpz(label) => {
+                if let Some(value) = state.stack.last() {
+                    if value.is_zero() {
+                        InstructionReturn::Jump(label.clone())
+                    } else {
+                        InstructionReturn::None
+                    }
+                } else {
+                    panic!("tried popping when the stack is empty during jpz operation")
+                }
             }
         }
     }

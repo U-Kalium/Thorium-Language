@@ -1,4 +1,5 @@
 use core::panic;
+use std::collections::HashMap;
 use std::iter::Peekable;
 use std::ops::Neg;
 
@@ -11,6 +12,7 @@ impl NodeFunc {
             ident: String::new(),
             export_name: None,
             intructions: Vec::new(),
+            labels: HashMap::new()
         };
         tokens.next();
         match tokens.next().unwrap() {
@@ -24,12 +26,12 @@ impl NodeFunc {
                     token => panic!("Syntax Error: expected StringLit found {:?}", token),
                 };
                 func_node.intructions = match tokens.next().unwrap() {
-                    Token::Colon => parse_instructions(tokens),
+                    Token::Colon => parse_instructions(tokens, &mut func_node.labels),
                     token => panic!("Syntax Error: expected Colon found {:?}", token),
                 }
             }
             Token::Colon => {
-                func_node.intructions = parse_instructions(tokens);
+                func_node.intructions = parse_instructions(tokens, &mut func_node.labels);
             }
             token => panic!("Syntax Error: expected Export or Colon found {:?}", token),
         }
@@ -39,10 +41,12 @@ impl NodeFunc {
 
 fn parse_instructions<'a, I: Iterator<Item = &'a Token>>(
     tokens: &mut Peekable<I>,
+    labels: &mut HashMap<String, usize>
 ) -> Vec<NodeIntruction> {
     let mut instrucions = Vec::new();
+    let mut index = 0;
 
-    while tokens.peek().is_some_and(|token| match **token {
+    while tokens.peek().is_some_and(|(token)| match *token {
         Token::Word(WordToken::I32) => true,
         Token::Word(WordToken::I16) => true,
         Token::Word(WordToken::I8) => true,
@@ -50,10 +54,22 @@ fn parse_instructions<'a, I: Iterator<Item = &'a Token>>(
         Token::Word(WordToken::F32) => true,
         Token::Word(WordToken::F64) => true,
         Token::Word(WordToken::Call) => true,
+        Token::Word(WordToken::Jmp) => true,
+        Token::Word(WordToken::Jpz) => true,
         Token::Word(WordToken::Return) => true,
-        _ => false,
+        Token::LabelIdent(label_name) => {
+            // tokens.next();
+            labels.insert(label_name.clone(), index);
+            true
+        }
+        other_token => {
+            false
+        },
     }) {
-        instrucions.push(NodeIntruction::parse(tokens));
+        index += 1;
+        if let Some(instruction) = NodeIntruction::parse(tokens) {
+            instrucions.push(instruction);
+        }
     }
 
     instrucions
@@ -196,29 +212,46 @@ fn parse_value_instruction<'a, I: Iterator<Item = &'a Token>>(
 }
 
 impl NodeIntruction {
-    fn parse<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peekable<I>) -> NodeIntruction {
+    fn parse<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peekable<I>) -> Option<NodeIntruction> {
         match tokens.next().unwrap() {
-            Token::Word(WordToken::I32) => parse_value_instruction(tokens, NodeType::I32),
-            Token::Word(WordToken::I16) => parse_value_instruction(tokens, NodeType::I16),
-            Token::Word(WordToken::I64) => parse_value_instruction(tokens, NodeType::I64),
-            Token::Word(WordToken::I8) => parse_value_instruction(tokens, NodeType::I8),
-            Token::Word(WordToken::F32) => parse_value_instruction(tokens, NodeType::F32),
-            Token::Word(WordToken::F64) => parse_value_instruction(tokens, NodeType::F64),
+            Token::Word(WordToken::I32) => Some(parse_value_instruction(tokens, NodeType::I32)),
+            Token::Word(WordToken::I16) => Some(parse_value_instruction(tokens, NodeType::I16)),
+            Token::Word(WordToken::I64) => Some(parse_value_instruction(tokens, NodeType::I64)),
+            Token::Word(WordToken::I8) => Some(parse_value_instruction(tokens, NodeType::I8)),
+            Token::Word(WordToken::F32) => Some(parse_value_instruction(tokens, NodeType::F32)),
+            Token::Word(WordToken::F64) => Some(parse_value_instruction(tokens, NodeType::F64)),
             Token::Word(WordToken::Call) => match tokens.next().unwrap() {
-                Token::FuncIdent(ident) => NodeIntruction::Call(ident.clone()),
+                Token::FuncIdent(ident) => Some(NodeIntruction::Call(ident.clone())),
                 token => panic!("Syntax Error: expected FuncIdent found {:?}", token),
             },
-            Token::Word(WordToken::Pop) => NodeIntruction::Pop,
-            Token::Word(WordToken::Return) => NodeIntruction::Return,
-            Token::Word(WordToken::Declare) => NodeIntruction::Declare {
+            Token::Word(WordToken::Pop) => Some(NodeIntruction::Pop),
+            Token::Word(WordToken::Return) => Some(NodeIntruction::Return),
+            Token::Word(WordToken::Declare) => Some(NodeIntruction::Declare {
                 variable: NodeVariable::parse(tokens),
-            },
-            Token::Word(WordToken::Set) => NodeIntruction::Set {
+            }),
+            Token::Word(WordToken::Set) => Some(NodeIntruction::Set {
                 variable: NodeVariable::parse(tokens),
-            },
-            Token::Word(WordToken::Get) => NodeIntruction::Get {
+            }),
+            Token::Word(WordToken::Get) => Some(NodeIntruction::Get {
                 variable: NodeVariable::parse(tokens),
-            },
+            }),
+            Token::Word(WordToken::Jmp) => {
+                match tokens.next().unwrap() {
+                    Token::LabelIdent(ident) => {
+                        Some(NodeIntruction::Jmp(ident.clone()))
+                    }
+                    token => panic!("Syntax Error: expected label ident found {:?}", token)
+                }
+            }
+            Token::Word(WordToken::Jpz) => {
+                match tokens.next().unwrap() {
+                    Token::LabelIdent(ident) => {
+                        Some(NodeIntruction::Jpz(ident.clone()))
+                    }
+                    token => panic!("Syntax Error: expected label ident found {:?}", token)
+                }
+            }
+            Token::LabelIdent(_) => None,
             token => panic!("Syntax Error: expected instruction found {:?}", token),
         }
     }
@@ -230,7 +263,7 @@ impl NodeVariable {
             Token::VarIdent(ident) => NodeVariable {
                 ident: ident.clone(),
             },
-            token => panic!("yntax Error: expected Variable Ident found {:?}", token),
+            token => panic!("Syntax Error: expected Variable Ident found {:?}", token),
         }
     }
 }
