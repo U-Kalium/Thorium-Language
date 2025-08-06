@@ -1,0 +1,6 @@
+func $start export "_start" :
+    call $main
+    return
+
+func $main :
+    i64.push 10

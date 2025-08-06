@@ -1,0 +1,7 @@
+
+func $start export "_start" :
+    call $main
+    return
+
+func $main:
+   i32.push 420

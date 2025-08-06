@@ -1,267 +1,165 @@
+use std::collections::HashMap;
 use std::{collections::HashSet, iter::Peekable};
 
 use crate::tokenizer::Token;
+use crate::tokenizer::TokenType::*;
 
-pub struct NodeProgram {
-    pub functions: Vec<NodeFunc>
+
+
+struct FunctionType {
+    parems: HashMap<String, String>,
+    returns: Vec<String> 
 }
-
-pub struct NodeFunc {
-    pub ident: String,
-    pub parems: Option<NodeParems>,
-    pub func_return: Option<NodeType>,
-    pub body: NodeScope
-}
-impl NodeFunc {
-    fn parse<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peekable<I>) -> Self {
-        let mut ident = String::new();
-        let mut func_return = None;
-        let mut func_scope = NodeScope { statements: Vec::new(), variables: HashSet::new() };
-        // consuming Fn token
-        let mut prev_token = tokens.next().unwrap();
-
-        'consume: while tokens.peek().is_some() {
-            let current_token = tokens.next().unwrap();
-            match prev_token {
-                Token::Fn => {
-                    match current_token {
-                        Token::Ident(ident_name) => ident = ident_name.clone(),
-                        _ => panic!("did not expect {:?} token after Fn token", current_token)
-                    }
-                },
-                Token::Ident(ident) => {
-                    match current_token {
-                        Token::OpenBracket => {}
-                        _ => panic!("did not expect {:?} token after Ident token", current_token)
-                    }
-                },
-                Token::OpenBracket => {
-                    match current_token {
-                        Token::CloseBracket => {}
-                        _ => panic!("did not expect {:?} token after LeftParenth token", current_token)
-                    }
-                },
-                Token::CloseBracket => {
-                    match current_token {
-                        Token::I32 => {
-                            func_return = Some(NodeType::I32)
-                        }
-                        _ => panic!("did not expect {:?} token after RightParenth token", current_token)
-                    }
-                },
-                Token::I32 => {
-                    match current_token {
-                        Token::OpenCurlyBrack => {
-                            func_scope = NodeScope::parse(tokens);
-                            break 'consume;
-                        }
-                        _ => panic!("did not expect {:?} token after I32 token", current_token)
-                    }
-                }
-                _ => panic!("did not expect {:?} token", prev_token)
-            }
-
-            prev_token = current_token;
-        } 
-
-        if ident.is_empty() {
-            panic!("did not provide an identifier ")
-        }
-
-        Self {
-            parems: None,
-            func_return,
-            ident,
-            body: func_scope
-        }
-    }
-
-}
-
-struct NodeParems {
-
-}
-pub enum NodeType {
-    I32
-}
-pub struct NodeScope {
-    pub statements: Vec<NodeStatement>,
-    pub variables: HashSet<String>
-}
-
-impl NodeScope {
-    fn parse<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peekable<I>) -> Self {
-        let mut statements = Vec::new();
-        let mut variables = HashSet::new();
-
-        'consume: while tokens.peek().is_some() {
-            let peeked = tokens.peek().unwrap();
-            match peeked {
-                Token::Return => {
-                    statements.push(NodeStatement::parse(tokens, &mut variables));
-                }
-                Token::Var =>{
-                    statements.push(NodeStatement::parse(tokens, &mut variables));
-                }
-                Token::CloseCurlyBrack => {
-                    tokens.next();
-                    break 'consume;
-                }
-                Token::Ident(ident) => {
-                    statements.push(NodeStatement::parse(tokens, &mut variables));
-                }
-                Token::NewLine => {
-                    tokens.next();
-                }
-                _ => panic!("expected keywoard or ident token found {:?}", peeked)
-            }
-        }
-
-        Self {
-            statements,
-            variables
+impl FunctionType {
+    fn new() -> Self {
+        FunctionType {
+            parems: HashMap::new(),
+            returns: Vec::new()
         }
     }
 }
 
-pub enum NodeStatement {
-    Return(NodeExpr),
-    VariableDecleration{
-        ident: String,
-        var_type: NodeType,
-        expression: NodeExpr
-    },
-    VariableAssignment{
-        ident: String,
-        expression: NodeExpr
-    }
+struct Parser {
+    functions: HashMap<String, FunctionType>,
+    types: HashSet<String>
 }
 
-impl NodeStatement {
-    fn parse<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peekable<I>, variables: &mut HashSet<String>) -> Self {
-        let current_token = tokens.next().unwrap();
-        let mut node_statement: NodeStatement;
-
-        match current_token {
-            Token::Return => {
-                let peeked = tokens.peek().unwrap();
-                match peeked {
-                    Token::IntLit(int) => {
-                        return NodeStatement::Return(NodeExpr::parse(tokens, variables));
-                    }
-                    Token::Ident(ident) => {
-                        return NodeStatement::Return(NodeExpr::parse(tokens, variables));
-                    }
-                    _ => panic!("expected value token found {:?}", peeked)
-                }
-            }
-            Token::Var => {
-                let ident_token = tokens.next().unwrap();
-                let mut ident = String::new();
-                let mut var_type: NodeType;
-                let mut expression: NodeExpr;
-                match ident_token {
-                    Token::Ident(name) => {
-                        if !variables.contains(&name.clone()) {
-                            ident = name.clone();
-                            variables.insert(name.clone());
-                        } else {
-                            panic!("variable {} is already defined", name);
-                        }
-                        
-                    }
-                    _ => panic!("expected identifier token found {:?}", ident_token) 
-                }
-                let colon_or_equal = tokens.next().unwrap();
-                match colon_or_equal {
-                    Token::Equal => todo!("need to implement type infrence"),
-                    Token::Colon => {}
-                    _ => panic!("expected colon or equal found {:?}", colon_or_equal)
-                }
-                let var_type_token = tokens.next().unwrap();
-                match var_type_token {
-                    Token::I32 => var_type = NodeType::I32,
-                    _ => panic!("expected type found {:?}", var_type_token)
-                };
-                let equal_token = tokens.next().unwrap();
-                match equal_token {
-                    Token::Equal => expression = NodeExpr::parse(tokens, variables),
-                    _ => panic!("expected equal sign found {:?}", equal_token)
-                }
-                node_statement = Self::VariableDecleration { ident, var_type, expression }
-            }
-            Token::Ident(ident) => {
-                let mut expression: NodeExpr;
-                if !variables.contains(ident) {
-                    panic!("variable {ident} not declared ")
-                }
-                let equal_token = tokens.next().unwrap(); 
-                match equal_token {
-                    Token::Equal => {
-                        expression = NodeExpr::parse(tokens, variables)
-                    }
-                    _ => panic!("expected = found {equal_token:?}")
-                }
-                node_statement = Self::VariableAssignment{
-                    ident: ident.clone(),
-                    expression
-
-                }
-            }
-            _ => panic!("expected statement token found {:?}", current_token)
-        }
-        let end_statement_token = tokens.next().unwrap();
-        match end_statement_token {
-            Token::Semi => {}
-            Token::NewLine => {}
-            _ => panic!("expected end of statement (either newline or ;) found {end_statement_token:?}")
-        }
-        node_statement
-    }
-
-}
-
-pub enum NodeExpr {
-    I32(i32),
-    Variable(String)
-}
-
-impl NodeExpr {
-    fn parse<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peekable<I>, variables: &mut HashSet<String>) -> Self {
-        let peeked = tokens.peek().unwrap();
-        match peeked {
-            Token::Ident(name) => {
-                if variables.contains(name) {
-                    tokens.next();
-                    NodeExpr::Variable(name.clone())
-                } else {
-                    panic!("variable {} has not been declared", name)
-                }
-            }
-            Token::IntLit(val) => {
-                tokens.next();
-                NodeExpr::I32(*val)
-            }
-            _ => panic!("expected an ident or i32literal got {:?}", peeked)
+impl Parser {
+    fn new() -> Self {
+        Parser {
+            functions: HashMap::new(),
+            types: HashSet::new()
         }
     }
 
+    fn parse_func_sig<'a, I: Iterator<Item = &'a Token>>(&mut self, tokens: &mut Peekable<I>) -> String {
+        fn parse_func_args<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peekable<I>) -> String {
+            let func_args = String::new();
+            let token = tokens.next().unwrap();
+            match &token.token_type {
+                CloseBracket => {}
+                Ident(ident) => todo!("add function paremeters"),
+                t => panic!("Syntax Error: expected ) or ident for function args, found {t:?} at {}:{} ", token.line, token.column)
+
+            }
+            func_args
+        }
+        let mut func_name = String::new();
+        let mut func_type = FunctionType::new();
+
+        let mut func_sig = String::new();
+        let mut token = tokens.next().unwrap();
+        match &token.token_type {
+            Fn => {
+                func_sig.push_str("func ");
+            }
+            t => panic!("Syntax Error: expected `fn` keyword, found {t:?} at {}:{}", token.line, token.column)
+        }
+        // func name
+        token = tokens.next().unwrap();
+        match &token.token_type {
+            Ident(ident) => {
+                if self.functions.contains_key(ident) {
+                    panic!("Error: function {ident} already declared")
+                }
+                func_sig.push_str(format!("${ident}").as_str());
+                func_name = ident.clone()
+            }
+            OpenBracket => {
+                todo!("anonymouse function parsing")
+            }
+            t => panic!("Syntax Error: expected ident or (), found {t:?} at {}:{} ", token.line, token.column)
+        }
+        // func arguments
+        token = tokens.next().unwrap();
+        match &token.token_type {
+            OpenBracket => {
+                func_sig.push_str(&parse_func_args(tokens))
+            }
+            OpenAngleBracket =>  {
+                todo!("Method signature")
+            }
+            t => panic!("Syntax Error: expected () or <>, found {t:?} at {}:{} ", token.line, token.column)
+        }
+        // func returns
+        func_type.returns.push(self.parse_type(tokens));
+        func_sig.push_str(":\n");
+
+        // func body
+        func_sig.push_str(&self.parse_scope(tokens));
+        
+        self.functions.insert(func_name, func_type);
+
+        func_sig
+    }
+
+    fn parse_scope<'a, I: Iterator<Item = &'a Token>>(&mut self, tokens: &mut Peekable<I>) -> String  {
+        let mut scope = String::new();
+        let mut token = tokens.next().unwrap();
+        match &token.token_type {
+            OpenCurlyBracket => {}
+            t => panic!("Syntax Error: expected {{, found {t:?} at {}{} ", token.line, token.column)
+        }
+        token = tokens.next().unwrap();
+        while token.token_type != CloseCurlyBracket{
+            scope.push_str(&self.parse_statement(tokens));
+            token = tokens.next().unwrap();
+        }
+        scope
+    }
+
+    fn parse_type<'a, I: Iterator<Item = &'a Token>>(&mut self, tokens: &mut Peekable<I>) -> String {
+        let parsed_type ;
+        let token = tokens.next().unwrap();
+        match &token.token_type {
+            I32 => parsed_type = "i32".to_string(),
+            Ident(_ident) => todo!("Custom types parsing"),
+            t => panic!("Syntax Error: expected type, found {t:?} at {}{} ", token.line, token.column)
+        }
+
+        parsed_type
+    }
+
+    fn parse_statement<'a, I: Iterator<Item = &'a Token>>(&mut self, tokens: &mut Peekable<I>) -> String {
+        let mut statement = String::new();
+        let mut token = tokens.next().unwrap();
+        match &token.token_type {
+            Return => {
+                token = tokens.next().unwrap();
+                match &token.token_type {
+                    IntLit(number) => {
+                        statement.push_str(&format!("   i32.push {number}"));
+                    }
+                    t => panic!("Syntax Error: expected i32, found {t:?} at {}:{} ", token.line, token.column)
+                }
+            }
+            t => panic!("Syntax Error: expected statement, found {t:?} at {}:{} ", token.line, token.column)
+        }
+        token = tokens.next().unwrap();
+        match &token.token_type {
+            SemiColon => {}
+            NewLine => {}
+            t => panic!("Syntax Error: expected newline or semicolon, found {t:?} at {}:{} ", token.line, token.column)
+        }
+        statement
+    }
 }
 
-pub fn parse(tokens: Vec<Token>) -> NodeProgram {
-    let mut functions = Vec::new();
-    let mut tokens_iter = tokens.iter().peekable();
-    while tokens_iter.peek().is_some() {
-        let peeked = tokens_iter.peek().unwrap();
-        match peeked {
-            Token::Fn => {
-                functions.push(NodeFunc::parse(&mut tokens_iter));
-            }
-            _ => panic!("invalid token found at program base: {:?}", peeked)
-        }
+pub fn parse<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peekable<I>) -> String {
+    let mut parser = Parser::new(); 
+    let mut bin = String::new();
+    bin.push_str
+("
+func $start export \"_start\" :
+    call $main
+    return
+
+");
+    let peeked_token = tokens.peek().unwrap();
+    match &peeked_token.token_type {
+        Fn => bin.push_str(parser.parse_func_sig(tokens).as_str()),
+        t => panic!("Syntax Error: unexpected token {t:?} found in file base at {}{}", peeked_token.line, peeked_token.column)
     }
 
-    NodeProgram {
-        functions
-    }
+    bin
 }

@@ -1,5 +1,5 @@
 // use std::env;
-use std::fs;
+use std::{env, fs};
 
 use crate::parser::parse_tokens;
 use crate::runner::State;
@@ -12,7 +12,9 @@ mod tokenizer;
 mod tests;
 
 fn main() {
-    // let command_line_args: Vec<String> = env::args().collect();
+    let command_line_args: Vec<String> = env::args().collect();
+
+    let file_name = &command_line_args[1];
 
     // let file_content = fs::read_to_string(command_line_args[1].clone())
     //     .expect("Should have been able to read the file");
@@ -20,7 +22,7 @@ fn main() {
 
 
     let file_content =
-        fs::read_to_string("test.thb").expect("Should have been able to read the file");
+        fs::read_to_string(file_name).expect("Should have been able to read the file");
 
     let tokens = tokenize(file_content).unwrap();
     // println!("tokens: \n {:?}", tokens);

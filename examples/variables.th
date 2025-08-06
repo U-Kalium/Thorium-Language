@@ -1,0 +1,7 @@
+fn main() i32 {
+    var a i32; let b i32 {
+        return 69
+    }
+    a = 10
+    return a
+}
