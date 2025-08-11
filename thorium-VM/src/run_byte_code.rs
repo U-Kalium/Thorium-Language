@@ -7,9 +7,10 @@ struct MachineState {
     functions: HashMap<String, usize>,
     exports: HashMap<String, usize>,
     function_stack: Vec<usize>,
-    stack: Vec<StackValue>
+    stack: Vec<StackValue>,
+    variables: HashMap<String, StackValue>
 }
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum StackValue {
     I128(i128),
     I64(i64),
@@ -17,7 +18,8 @@ enum StackValue {
     I16(i16),
     I8(i8),
     F32(f32),
-    F64(f64)
+    F64(f64),
+    Null
 }
 
 impl MachineState {
@@ -27,6 +29,7 @@ impl MachineState {
             exports: HashMap::new(),
             function_stack: Vec::new(),
             stack: Vec::new(),
+            variables: HashMap::new()
         }
     }
 }
@@ -97,6 +100,15 @@ fn run_func(tokens: &mut TokenIter, state: &mut MachineState, func_index: usize)
             Word(F32) => {
                 run_numeric_instruction(tokens, state, NumericType::F32);
             }
+            Word(Declare) => {
+                run_variable_decleration(tokens, state);
+            }
+            Word(Set) => {
+                run_variable_set(tokens, state);
+            }
+            Word(Get) => {
+                run_variable_get(tokens, state);
+            }
             wrong_token => panic!("Syntax Error: Did not expect {wrong_token:?} at {}:{}", token.line, token.column)
         }
     }
@@ -117,6 +129,48 @@ enum NumericType {
     F32,
     F64
 
+}
+
+fn run_variable_decleration(tokens: &mut TokenIter, state: &mut MachineState) {
+    while match tokens.peek().token_type {
+        VarIdent(_) => true,
+        _ => false
+    } {
+        let token = tokens.next();
+        if let VarIdent(ident) = token.token_type {
+            state.variables.insert(ident.clone(), StackValue::Null);
+        }
+    }
+}
+
+fn run_variable_set(tokens: &mut TokenIter, state: &mut MachineState) {
+    let token = tokens.next(); 
+    match &token.token_type {
+        VarIdent(ident) => {
+            if let Some(value) = state.stack.pop() {
+                if let Some(var) = state.variables.get_mut(ident) {
+                    *var = value
+                } else {
+                    panic!("Error: Variable {ident} has not been declared found at {}:{}", token.line, token.column)
+                }
+            }
+        }
+        wrong_token => panic!("Syntax Error: Expected variable ident found {:?} at {}:{}",wrong_token,  token.line, token.column)
+    }
+}
+
+fn run_variable_get(tokens: &mut TokenIter, state: &mut MachineState) {
+    let token = tokens.next();
+    match &token.token_type {
+        VarIdent(ident) => {
+            if let Some(var) = state.variables.get(ident) {
+                state.stack.push(*var);
+            } else {
+                panic!("Error: Variable {ident} has not been declared found at {}:{}", token.line, token.column)
+            }
+        }
+        wrong_token => panic!("Syntax Error: Expected variable ident found {:?} at {}:{}",wrong_token,  token.line, token.column)
+    }
 }
 
 fn run_numeric_instruction(tokens: &mut TokenIter, state: &mut MachineState, num_type: NumericType) {

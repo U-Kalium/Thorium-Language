@@ -1,6 +1,7 @@
 func $start "_start" :
     call $main
-    return
+endfunc
 
-func $main :
-    i64.push 10
+func $main:
+   i64 push 420
+endfunc
