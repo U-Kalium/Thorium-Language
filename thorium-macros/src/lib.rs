@@ -28,7 +28,7 @@ pub fn tokenize_words(_attr: TokenStream, item: TokenStream) -> TokenStream {
     }
     let function_beginning = format!(
         "
-pub fn tokenize_word(tokens: &mut Vec<Token>, buffer: &mut String) -> Result<(), String> {{
+pub fn tokenize_word(tokens: &mut Vec<Token>, buffer: &mut String, file_line: u32, column: u32) -> Result<(), String> {{
     match buffer.as_str() {{
     "
     );
@@ -38,7 +38,11 @@ pub fn tokenize_word(tokens: &mut Vec<Token>, buffer: &mut String) -> Result<(),
         match_body.push_str(
             format!(
                 "\"{name}\" => {{
-                tokens.push(Token::Word(WordToken::{varient}));
+                tokens.push(Token {{
+                    token_type: TokenType::Word(WordToken::{varient}),
+                    line: file_line,
+                    column: column - buffer.len() as u32
+                }});
             }}
             "
             )

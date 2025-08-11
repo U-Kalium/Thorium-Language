@@ -183,6 +183,7 @@ pub fn tokanize(content: String) -> Vec<Token> {
         } else if peeked.is_ascii_digit() {
             while content_chars.peek().is_some_and(|char| char.is_ascii_digit()) {
                 buffer.push(content_chars.next().unwrap());
+                column += 1
             }
             tokens.push(Token {
                 token_type: TokenType::IntLit(buffer.parse().unwrap()),

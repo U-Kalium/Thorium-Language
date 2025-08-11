@@ -26,6 +26,7 @@ fn main() {
 
     fs::write(byte_code_filename, byte_code).unwrap();
     
+    
     // Command::new("wasmtime")
     //         .arg("test.wat")
     //         .spawn().unwrap();

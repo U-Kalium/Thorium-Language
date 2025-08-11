@@ -1,5 +1,5 @@
 
-func $start export "_start" :
+func $start "_start" :
     call $main
     return
 

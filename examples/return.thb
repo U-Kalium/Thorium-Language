@@ -1,7 +1,10 @@
 
-func $start export "_start" :
+func $start "_start" :
     call $main
+    f64 push 69.9
     return
+endfunc
 
 func $main:
-   i32.push 420
+   i64 push 420
+endfunc
