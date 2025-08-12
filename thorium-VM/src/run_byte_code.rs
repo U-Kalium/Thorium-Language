@@ -196,7 +196,7 @@ fn run_numeric_instruction(tokens: &mut TokenIter, state: &mut MachineState, num
                                 Number(num_after_decimal) => {
                                     let float: f32 = format!("{num}.{num_after_decimal}").parse().unwrap();
                                     state.stack.push(StackValue::F32(float))
-                                }
+                                } 
                                 wrong_token => panic!("Syntax Error: Expected number found {wrong_token:?} at {}:{}", token.line, token.column)
                             }
                         },
@@ -218,6 +218,53 @@ fn run_numeric_instruction(tokens: &mut TokenIter, state: &mut MachineState, num
                 }
                 wrong_token => panic!("Syntax Error: Expected number found {wrong_token:?} at {}:{}", token.line, token.column)
             }
+            while match tokens.peek().token_type {
+                Number(_) => true,
+                _ => false
+            } {
+                token = tokens.next();
+                match token.token_type {
+                    Number(num) => {
+                        match num_type {
+                            NumericType::I128 => state.stack.push(StackValue::I128(num)),
+                            NumericType::I64 => state.stack.push(StackValue::I64(num as i64)),
+                            NumericType::I32 => state.stack.push(StackValue::I32(num as i32)),
+                            NumericType::I16 => state.stack.push(StackValue::I16(num as i16)),
+                            NumericType::I8 => state.stack.push(StackValue::I8(num as i8)),
+                            NumericType::F32 => {
+                                token = tokens.next();
+                                if token.token_type != FullStop {
+                                    panic!("Syntax Error: Expected full stop for float found {:?} at {}:{}",token.token_type,  token.line, token.column)
+                                }
+                                token = tokens.next();
+                                match token.token_type {
+                                    Number(num_after_decimal) => {
+                                        let float: f32 = format!("{num}.{num_after_decimal}").parse().unwrap();
+                                        state.stack.push(StackValue::F32(float))
+                                    } 
+                                    wrong_token => panic!("Syntax Error: Expected number found {wrong_token:?} at {}:{}", token.line, token.column)
+                                }
+                            },
+                            NumericType::F64 => {
+                                token = tokens.next();
+                                if token.token_type != FullStop {
+                                    panic!("Syntax Error: Expected full stop for float found {:?} at {}:{}",token.token_type,  token.line, token.column)
+                                }
+                                token = tokens.next();
+                                match token.token_type {
+                                    Number(num_after_decimal) => {
+                                        let float: f64 = format!("{num}.{num_after_decimal}").parse().unwrap();
+                                        state.stack.push(StackValue::F64(float))
+                                    }
+                                    wrong_token => panic!("Syntax Error: Expected number found {wrong_token:?} at {}:{}", token.line, token.column)
+                                }
+                            },
+                        }
+                    }
+                    _ => panic!("This should be unreachable")
+                }
+            }
+            
 
         }
         wrong_token => panic!("Syntax Error: Did not expect {wrong_token:?} at {}:{} expected numeric intruction", token.line, token.column)

@@ -4,7 +4,7 @@ endfunc
 
 func $main:
     declare %a %b
-    i32 push 69
+    i32 push 69 100
     set %b
     get %b
     set %a
