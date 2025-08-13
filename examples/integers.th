@@ -1,0 +1,13 @@
+fn main() f32 {
+    var a i64 {
+        return 99999
+    }
+    let b i32 = 100
+    var c i16 = 69
+    let d i8 {
+        return 120
+    }
+    var e f32 = 3.14
+    let f f64 = 33.3333
+    return e
+}

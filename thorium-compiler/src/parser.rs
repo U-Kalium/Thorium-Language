@@ -37,7 +37,7 @@ impl Parser {
         }
     }
 
-    fn parse_func_sig<'a, I: Iterator<Item = &'a Token>>(&mut self, tokens: &mut Peekable<I>) -> String {
+    fn parse_func<'a, I: Iterator<Item = &'a Token>>(&mut self, tokens: &mut Peekable<I>) -> String {
         fn parse_func_args<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peekable<I>) -> String {
             let func_args = String::new();
             let token = tokens.next().unwrap();
@@ -52,11 +52,11 @@ impl Parser {
         let mut func_name = String::new();
         let mut func_type = FunctionType::new();
 
-        let mut func_sig = String::new();
+        let mut func = String::new();
         let mut token = tokens.next().unwrap();
         match &token.token_type {
             Fn => {
-                func_sig.push_str("func ");
+                func.push_str("func ");
             }
             t => panic!("Syntax Error: expected `fn` keyword, found {t:?} at {}:{}", token.line, token.column)
         }
@@ -67,7 +67,7 @@ impl Parser {
                 if self.functions.contains_key(ident) {
                     panic!("Error: function {ident} already declared")
                 }
-                func_sig.push_str(format!("${ident}").as_str());
+                func.push_str(format!("${ident}").as_str());
                 func_name = ident.clone()
             }
             OpenBracket => {
@@ -79,7 +79,7 @@ impl Parser {
         token = tokens.next().unwrap();
         match &token.token_type {
             OpenBracket => {
-                func_sig.push_str(&parse_func_args(tokens))
+                func.push_str(&parse_func_args(tokens))
             }
             OpenAngleBracket =>  {
                 todo!("Method signature")
@@ -88,17 +88,18 @@ impl Parser {
         }
         // func returns
         func_type.returns.push(self.parse_type(tokens));
-        func_sig.push_str(":\n");
+        func.push_str(":\n");
 
         // func body
-        func_sig.push_str(&self.parse_scope(tokens));
+        func.push_str(&self.parse_scope(tokens, func_type.returns.clone()));
+        func.push_str("endfunc");
         
         self.functions.insert(func_name, func_type);
 
-        func_sig
+        func
     }
 
-    fn parse_scope<'a, I: Iterator<Item = &'a Token>>(&mut self, tokens: &mut Peekable<I>) -> String  {
+    fn parse_scope<'a, I: Iterator<Item = &'a Token>>(&mut self, tokens: &mut Peekable<I>, return_type: Vec<String>) -> String  {
         let mut variables = HashMap::new();
         let mut scope = String::new();
         let mut token = tokens.next().unwrap();
@@ -108,7 +109,7 @@ impl Parser {
         }
         token = tokens.next().unwrap();
         while token.token_type != CloseCurlyBracket{
-            scope.push_str(&self.parse_statement(tokens, &mut variables));
+            scope.push_str(&self.parse_statement(tokens, &mut variables, return_type.clone()));
             token = tokens.peek().unwrap();
         }
         tokens.next();
@@ -119,23 +120,28 @@ impl Parser {
         let parsed_type ;
         let token = tokens.next().unwrap();
         match &token.token_type {
+            I64 => parsed_type = "i64".to_string(),
             I32 => parsed_type = "i32".to_string(),
+            I16 => parsed_type = "i16".to_string(),
+            I8 => parsed_type = "i8".to_string(),
+            F64 => parsed_type = "f64".to_string(),
+            F32 => parsed_type = "f32".to_string(),
             Ident(_ident) => todo!("Custom types parsing"),
-            t => panic!("Syntax Error: expected type, found {t:?} at {}{} ", token.line, token.column)
+            t => panic!("Syntax Error: expected type, found {t:?} at {}:{} ", token.line, token.column)
         }
 
         parsed_type
     }
 
-    fn parse_statement<'a, I: Iterator<Item = &'a Token>>(&mut self, tokens: &mut Peekable<I>, variables: &mut HashMap<String, VariableProperties>) -> String {
+    fn parse_statement<'a, I: Iterator<Item = &'a Token>>(&mut self, tokens: &mut Peekable<I>, variables: &mut HashMap<String, VariableProperties>, scope_return_type: Vec<String>) -> String {
         let mut statement = String::new();
         let mut token = tokens.next().unwrap();
         match &token.token_type {
             Return => {
                 token = tokens.next().unwrap();
                 match &token.token_type {
-                    IntLit(number) => {
-                        statement.push_str(&format!("    i32.push {number}\n"));
+                    NumberLit(number) => {
+                        statement.push_str(&format!("    {} push {number}\n", scope_return_type[0]));
                     }
                     Ident(ident) => {
                         if !variables.contains_key(ident) {
@@ -151,26 +157,37 @@ impl Parser {
                 match &token.token_type {
                     Ident(ident) => {
                         statement.push_str(&format!("    declare %{ident}\n"));
-                        token = tokens.next().unwrap();
-                        match &token.token_type {
-                            I32 => {
-                                let variable_properties = VariableProperties {
-                                    variable_type: "i32".to_string(),
-                                    is_mutable: true
-                                };
-                                variables.insert(ident.clone(), variable_properties);
-                                let peeked_token = tokens.peek().unwrap();
-                                match peeked_token.token_type {
-                                    NewLine => {},
-                                    SemiColon => {}
-                                    _ => statement.push_str(&self.parse_assignment(tokens, variables, ident))
-                                }
-                                
-                            }
-                            Ident(ident) => todo!("var decleration with custom types"),
-                            t => panic!("Syntax Error: expected type, found {t:?} at {}:{} ", token.line, token.column)
-
+                        // token = tokens.next().unwrap();
+                        let variable_properties = VariableProperties {
+                            variable_type: self.parse_type(tokens),
+                            is_mutable: true
+                        };
+                        variables.insert(ident.clone(), variable_properties);
+                        let peeked_token = tokens.peek().unwrap();
+                        match peeked_token.token_type {
+                            NewLine => {},
+                            SemiColon => {}
+                            _ => statement.push_str(&self.parse_assignment(tokens, variables, ident))
                         }
+                        // match &token.token_type {
+                        //     I32 => {
+                        //         let variable_properties = VariableProperties {
+                        //             variable_type: "i32".to_string(),
+                        //             is_mutable: true
+                        //         };
+                        //         variables.insert(ident.clone(), variable_properties);
+                        //         let peeked_token = tokens.peek().unwrap();
+                        //         match peeked_token.token_type {
+                        //             NewLine => {},
+                        //             SemiColon => {}
+                        //             _ => statement.push_str(&self.parse_assignment(tokens, variables, ident))
+                        //         }
+                                
+                        //     }
+                        //     Ident(ident) => todo!("var decleration with custom types"),
+                        //     t => panic!("Syntax Error: expected type, found {t:?} at {}:{} ", token.line, token.column)
+
+                        // }
                     }
                     t => panic!("Syntax Error: expected identifier, found {t:?} at {}:{} ", token.line, token.column)
                 }
@@ -181,26 +198,37 @@ impl Parser {
                 match &token.token_type {
                     Ident(ident) => {
                         statement.push_str(&format!("    declare %{ident}\n"));
-                        token = tokens.next().unwrap();
-                        match &token.token_type {
-                            I32 => {
-                                let variable_properties = VariableProperties {
-                                    variable_type: "i32".to_string(),
-                                    is_mutable: false
-                                };
-                                variables.insert(ident.clone(), variable_properties);
-                                let peeked_token = tokens.peek().unwrap();
-                                match peeked_token.token_type {
-                                    NewLine => {},
-                                    SemiColon => {}
-                                    _ => statement.push_str(&self.parse_assignment(tokens, variables, ident))
-                                }
-                                
-                            }
-                            Ident(ident) => todo!("let decleration with custom types"),
-                            t => panic!("Syntax Error: expected type, found {t:?} at {}:{} ", token.line, token.column)
-
+                        // token = tokens.next().unwrap();
+                        let variable_properties = VariableProperties {
+                            variable_type: self.parse_type(tokens),
+                            is_mutable: false
+                        };
+                        variables.insert(ident.clone(), variable_properties);
+                        let peeked_token = tokens.peek().unwrap();
+                        match peeked_token.token_type {
+                            NewLine => {},
+                            SemiColon => {}
+                            _ => statement.push_str(&self.parse_assignment(tokens, variables, ident))
                         }
+                        // match &token.token_type {
+                        //     I32 => {
+                        //         let variable_properties = VariableProperties {
+                        //             variable_type: "i32".to_string(),
+                        //             is_mutable: false
+                        //         };
+                        //         variables.insert(ident.clone(), variable_properties);
+                        //         let peeked_token = tokens.peek().unwrap();
+                        //         match peeked_token.token_type {
+                        //             NewLine => {},
+                        //             SemiColon => {}
+                        //             _ => statement.push_str(&self.parse_assignment(tokens, variables, ident))
+                        //         }
+                                
+                        //     }
+                        //     Ident(ident) => todo!("let decleration with custom types"),
+                        //     t => panic!("Syntax Error: expected type, found {t:?} at {}:{} ", token.line, token.column)
+
+                        // }
                     }
                     t => panic!("Syntax Error: expected identifier, found {t:?} at {}:{} ", token.line, token.column)
                 }
@@ -229,14 +257,17 @@ impl Parser {
         let mut assignment = String::new();
         let mut peeked_token = tokens.peek().unwrap();
         match &peeked_token.token_type {
-            OpenCurlyBracket => assignment.push_str(&self.parse_scope(tokens)),
+            OpenCurlyBracket => {
+                let varibale_type = variables.get(variable).unwrap().variable_type.clone();
+                assignment.push_str(&self.parse_scope(tokens, vec![varibale_type]))
+            },
             Equal => {
                 tokens.next().unwrap();
                 let mut token = tokens.next().unwrap();
                 let variable_type = variables.get(variable).unwrap().variable_type.clone();
                 match &token.token_type {
-                    IntLit(num) => {
-                        assignment.push_str(&format!("   {variable_type}.push {num}\n"))
+                    NumberLit(num) => {
+                        assignment.push_str(&format!("    {variable_type} push {num}\n"))
                     }
                     Ident(ident) => {
                         if let Some(variable_properties) = variables.get(ident) {
@@ -264,14 +295,14 @@ pub fn parse<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peekable<I>) -> Str
     let mut bin = String::new();
     bin.push_str
 ("
-func $start export \"_start\" :
+func $start \"_start\" :
     call $main
     return
 
 ");
     let peeked_token = tokens.peek().unwrap();
     match &peeked_token.token_type {
-        Fn => bin.push_str(parser.parse_func_sig(tokens).as_str()),
+        Fn => bin.push_str(parser.parse_func(tokens).as_str()),
         t => panic!("Syntax Error: unexpected token {t:?} found in file base at {}{}", peeked_token.line, peeked_token.column)
     }
 

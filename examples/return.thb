@@ -1,10 +1,8 @@
 
 func $start "_start" :
     call $main
-    f64 push 69.9
-
-endfunc
+    return
 
 func $main:
-   i64 push 420
+    i32 push 420
 endfunc

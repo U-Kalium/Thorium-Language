@@ -1,0 +1,26 @@
+
+func $start "_start" :
+    call $main
+    return
+
+func $main:
+    declare %a
+    i64 push 99999
+    set %a
+    declare %b
+    i32 push 100
+    set %b
+    declare %c
+    i16 push 69
+    set %c
+    declare %d
+    i8 push 120
+    set %d
+    declare %e
+    f32 push 3.14
+    set %e
+    declare %f
+    f64 push 33.3333
+    set %f
+    get %e
+endfunc

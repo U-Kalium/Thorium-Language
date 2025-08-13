@@ -1,5 +1,5 @@
-fn main() i32 {
-    var a i32; let b i32 {
+fn main() i64 {
+    var a i64; let b i64 {
         return 69
     }
     a = 10

@@ -1,10 +1,31 @@
-use std::fs::File;
+use std::{fmt::Display, fs::File};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
+
+pub enum Number {
+    Float(f64),
+    Int(i128)
+}
+
+impl Display for Number {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Number::Float(num) => write!(f, "{}", num),
+            Number::Int(num) => write!(f, "{num}"),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub enum TokenType {
     Fn,
     Ident(String),
+    I64,
     I32,
+    I16,
+    I8,
+    F64,
+    F32,
     OpenBracket,
     CloseBracket,
     OpenCurlyBracket,
@@ -12,7 +33,7 @@ pub enum TokenType {
     OpenAngleBracket,
     CloseAngleBracket,
     Return,
-    IntLit(i32),
+    NumberLit(Number),
     Var,
     Let,
     Equal,
@@ -61,6 +82,36 @@ pub fn tokanize(content: String) -> Vec<Token> {
             } else if &buffer == &String::from("i32") {
                 tokens.push(Token {
                     token_type: TokenType::I32,
+                    line: file_line,
+                    column: column - buffer.len() as u32
+                });
+            } else if &buffer == &String::from("i64") {
+                tokens.push(Token {
+                    token_type: TokenType::I64,
+                    line: file_line,
+                    column: column - buffer.len() as u32
+                });
+            } else if &buffer == &String::from("i16") {
+                tokens.push(Token {
+                    token_type: TokenType::I16,
+                    line: file_line,
+                    column: column - buffer.len() as u32
+                });
+            } else if &buffer == &String::from("i8") {
+                tokens.push(Token {
+                    token_type: TokenType::I8,
+                    line: file_line,
+                    column: column - buffer.len() as u32
+                });
+            } else if &buffer == &String::from("f64") {
+                tokens.push(Token {
+                    token_type: TokenType::F64,
+                    line: file_line,
+                    column: column - buffer.len() as u32
+                });
+            } else if &buffer == &String::from("f32") {
+                tokens.push(Token {
+                    token_type: TokenType::F32,
                     line: file_line,
                     column: column - buffer.len() as u32
                 });
@@ -185,11 +236,26 @@ pub fn tokanize(content: String) -> Vec<Token> {
                 buffer.push(content_chars.next().unwrap());
                 column += 1
             }
-            tokens.push(Token {
-                token_type: TokenType::IntLit(buffer.parse().unwrap()),
-                line: file_line,
-                column: column - buffer.len() as u32
-            });
+            if *content_chars.peek().unwrap() == '.' {
+                buffer.push(content_chars.next().unwrap());
+                column += 1;
+                while content_chars.peek().is_some_and(|char| char.is_ascii_digit()) {
+                    buffer.push(content_chars.next().unwrap());
+                    column += 1
+                }
+                tokens.push(Token {
+                    token_type: TokenType::NumberLit(Number::Float(buffer.parse().unwrap())),
+                    line: file_line,
+                    column: column - buffer.len() as u32
+                });
+            } else {
+                tokens.push(Token {
+                    token_type: TokenType::NumberLit(Number::Int(buffer.parse().unwrap())),
+                    line: file_line,
+                    column: column - buffer.len() as u32
+                });
+            }
+
         }
         buffer.clear();
     }

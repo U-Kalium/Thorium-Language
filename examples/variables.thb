@@ -6,8 +6,9 @@ func $start "_start" :
 func $main:
     declare %a
     declare %b
-    i32.push 69
+    i64 push 69
     set %b
-   i32.push 10
+    i64 push 10
     set %a
     get %a
+endfunc
