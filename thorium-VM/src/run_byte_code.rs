@@ -267,6 +267,22 @@ fn run_numeric_instruction(tokens: &mut TokenIter, state: &mut MachineState, num
             
 
         }
+        Word(Add) => process_numerical_op(state, num_type, NumericeOp::Add),
+        Word(Sub) => process_numerical_op(state, num_type, NumericeOp::Sub),
+        Word(Mul) => process_numerical_op(state, num_type, NumericeOp::Mul),
+        Word(Div) => process_numerical_op(state, num_type, NumericeOp::Div),
+        Word(Rem) => process_numerical_op(state, num_type, NumericeOp::Rem),
+        Word(And) => process_numerical_op(state, num_type, NumericeOp::And),
+        Word(Or) => process_numerical_op(state, num_type, NumericeOp::Or),
+        Word(Xor) => process_numerical_op(state, num_type, NumericeOp::Xor),
+        Word(Eq) => process_numerical_op(state, num_type, NumericeOp::Eq),
+        Word(Neq) => process_numerical_op(state, num_type, NumericeOp::Neq),
+        Word(Gte) => process_numerical_op(state, num_type, NumericeOp::Gte),
+        Word(Gt) => process_numerical_op(state, num_type, NumericeOp::Gt),
+        Word(Lte) => process_numerical_op(state, num_type, NumericeOp::Lte),
+        Word(Lt) => process_numerical_op(state, num_type, NumericeOp::Lt),
+        Word(Max) => process_numerical_op(state, num_type, NumericeOp::Max),
+        Word(Min) => process_numerical_op(state, num_type, NumericeOp::Min),
         wrong_token => panic!("Syntax Error: Did not expect {wrong_token:?} at {}:{} expected numeric intruction", token.line, token.column)
     }
 }
@@ -325,4 +341,152 @@ fn find_funcs(tokens: &mut TokenIter, state: &mut MachineState) {
     }
     tokens.next();
     find_funcs(tokens, state);
+}
+
+#[derive(Debug)]
+enum NumericeOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Rem,
+    And,
+    Or,
+    Xor,
+    Eq,
+    Neq,
+    Gte,
+    Gt,
+    Lte,
+    Lt,
+    Max,
+    Min,
+}
+
+
+
+macro_rules! perform_operation {
+    (for int $type:ty, $operation:ident, $rhs:ident, $lhs:ident) => {
+        match $operation {
+            NumericeOp::Add => $lhs + $rhs,
+            NumericeOp::Sub => $lhs - $rhs,
+            NumericeOp::Mul => $lhs * $rhs,
+            NumericeOp::Div => $lhs / $rhs,
+            NumericeOp::Rem => $lhs % $rhs,
+            NumericeOp::And => $lhs & $rhs,
+            NumericeOp::Or => $lhs | $rhs,
+            NumericeOp::Xor => $lhs ^ $rhs,
+            NumericeOp::Eq => ($lhs == $rhs) as $type,
+            NumericeOp::Neq => ($lhs != $rhs) as $type,
+            NumericeOp::Gte => ($lhs >= $rhs) as $type,
+            NumericeOp::Gt => ($lhs > $rhs) as $type,
+            NumericeOp::Lte => ($lhs <= $rhs) as $type,
+            NumericeOp::Lt => ($lhs < $rhs) as $type,
+            NumericeOp::Max => $lhs.max($rhs),
+            NumericeOp::Min => $lhs.min($rhs),
+        }
+    };
+    (for float $type:ty, $operation:ident, $rhs:ident, $lhs:ident) => {
+        match $operation {
+            NumericeOp::Add => $lhs + $rhs,
+            NumericeOp::Sub => $lhs - $rhs,
+            NumericeOp::Mul => $lhs * $rhs,
+            NumericeOp::Div => $lhs / $rhs,
+            NumericeOp::Rem => $lhs % $rhs,
+            NumericeOp::Eq => ($lhs == $rhs) as i32 as $type,
+            NumericeOp::Neq => ($lhs != $rhs) as i32 as $type,
+            NumericeOp::Gte => ($lhs >= $rhs) as i32 as $type,
+            NumericeOp::Gt => ($lhs > $rhs) as i32 as $type,
+            NumericeOp::Lte => ($lhs <= $rhs) as i32 as $type,
+            NumericeOp::Lt => ($lhs < $rhs) as i32 as $type,
+            NumericeOp::Max => $lhs.max($rhs),
+            NumericeOp::Min => $lhs.min($rhs),
+            operation => panic!("operation {operation:?} can not be used on a float")
+        }
+    };
+}
+
+fn process_numerical_op(state: &mut MachineState, node_type: NumericType, operation: NumericeOp) {
+    let rhs = state
+        .stack
+        .pop()
+        .expect("Tried popping from empty track during numerical operation");
+    let lhs = state
+        .stack
+        .pop()
+        .expect("Tried popping from empty track during numerical operation");
+
+    match node_type {
+        NumericType::I32 => {
+            if let (StackValue::I32(rhs_val), StackValue::I32(lhs_val)) = (rhs, lhs) {
+                state.stack.push(StackValue::I32(perform_operation!(
+                    for int i32,
+                    operation, rhs_val, lhs_val
+                )))
+            } else {
+                panic!("tried applying operation but rhs was {rhs:?} and lhs was {lhs:?}")
+            }
+        }
+        NumericType::I64 => {
+            if let (StackValue::I64(rhs_val), StackValue::I64(lhs_val)) = (rhs, lhs) {
+                state.stack.push(StackValue::I64(perform_operation!(
+                    for int i64,
+                    operation, rhs_val, lhs_val
+                )))
+            } else {
+                panic!("tried applying operation but rhs was {rhs:?} and lhs was {lhs:?}")
+            }
+        }
+        NumericType::I16 => {
+            if let (StackValue::I16(rhs_val), StackValue::I16(lhs_val)) = (rhs, lhs) {
+                state.stack.push(StackValue::I16(perform_operation!(
+                    for int i16,
+                    operation, rhs_val, lhs_val
+                )))
+            } else {
+                panic!("tried applying operation but rhs was {rhs:?} and lhs was {lhs:?}")
+            }
+        }
+        NumericType::I8 => {
+            if let (StackValue::I8(rhs_val), StackValue::I8(lhs_val)) = (rhs, lhs) {
+                state.stack.push(StackValue::I8(perform_operation!(
+                    for int i8,
+                    operation, rhs_val, lhs_val
+                )))
+            } else {
+                panic!("tried applying operation but rhs was {rhs:?} and lhs was {lhs:?}")
+            }
+        }
+        NumericType::F32 => {
+            if let (StackValue::F32(rhs_val), StackValue::F32(lhs_val)) = (rhs, lhs) {
+                state.stack.push(StackValue::F32(perform_operation!(
+                    for float f32,
+                    operation, rhs_val, lhs_val
+                )))
+            } else {
+                panic!("tried applying operation but rhs was {rhs:?} and lhs was {lhs:?}")
+            }
+        }
+        NumericType::F64 => {
+            if let (StackValue::F64(rhs_val), StackValue::F64(lhs_val)) = (rhs, lhs) {
+                state.stack.push(StackValue::F64(perform_operation!(
+                    for float f64,
+                    operation, rhs_val, lhs_val
+                )))
+            } else {
+                panic!("tried applying operation but rhs was {rhs:?} and lhs was {lhs:?}")
+            }
+        }
+        NumericType::I128 => {
+            if let (StackValue::I64(rhs_val), StackValue::I64(lhs_val)) = (rhs, lhs) {
+                state.stack.push(StackValue::I64(perform_operation!(
+                    for int i64,
+                    operation, rhs_val, lhs_val
+                )))
+            } else {
+                panic!("tried applying operation but rhs was {rhs:?} and lhs was {lhs:?}")
+            }
+        }
+    }
+
 }
