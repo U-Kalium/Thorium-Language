@@ -1,0 +1,21 @@
+
+func $start "_start" :
+    call $main
+    return
+
+func $main:
+    declare %a
+    i32 push 10
+    set %a
+    declare %b
+    i32 push 10
+    set %b
+    get %a
+    get %b
+    i32 eq
+    cast i8
+    jpz "ifendL4C5"
+    i32 push 1
+@ifendL4C5
+    i32 push 4
+endfunc

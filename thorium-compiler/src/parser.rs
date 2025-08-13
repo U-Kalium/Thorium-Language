@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::{collections::HashSet, iter::Peekable};
 
-use crate::tokenizer::Token;
+use crate::tokenizer::{Number, Token};
 use crate::tokenizer::TokenType::*;
 
 
@@ -24,8 +24,38 @@ struct VariableProperties {
     is_mutable: bool
 }
 
+struct ExpressionReturn {
+    byte_code: String,
+    expression_type: String
+}
+#[derive(Debug, Clone)]
+
+enum Value {
+    Custom(String),
+    Number(Number)
+}
+#[derive(Debug, Clone)]
+enum Condition {
+    Equal,
+    NotEqual,
+} 
+#[derive(Debug, Clone)]
+enum Expression {
+    Variable(String),
+    Value {
+        expr_type: String,
+        value: Value
+    },
+    Conditional {
+        condition: Condition,
+        lhs: Box<Expression>,
+        rhs: Box<Expression>
+    }
+}
+
 struct Parser {
     functions: HashMap<String, FunctionType>,
+    variables: HashMap<String, VariableProperties>,
     types: HashSet<String>,
 }
 
@@ -33,6 +63,7 @@ impl Parser {
     fn new() -> Self {
         Parser {
             functions: HashMap::new(),
+            variables: HashMap::new(),
             types: HashSet::new()
         }
     }
@@ -169,25 +200,6 @@ impl Parser {
                             SemiColon => {}
                             _ => statement.push_str(&self.parse_assignment(tokens, variables, ident))
                         }
-                        // match &token.token_type {
-                        //     I32 => {
-                        //         let variable_properties = VariableProperties {
-                        //             variable_type: "i32".to_string(),
-                        //             is_mutable: true
-                        //         };
-                        //         variables.insert(ident.clone(), variable_properties);
-                        //         let peeked_token = tokens.peek().unwrap();
-                        //         match peeked_token.token_type {
-                        //             NewLine => {},
-                        //             SemiColon => {}
-                        //             _ => statement.push_str(&self.parse_assignment(tokens, variables, ident))
-                        //         }
-                                
-                        //     }
-                        //     Ident(ident) => todo!("var decleration with custom types"),
-                        //     t => panic!("Syntax Error: expected type, found {t:?} at {}:{} ", token.line, token.column)
-
-                        // }
                     }
                     t => panic!("Syntax Error: expected identifier, found {t:?} at {}:{} ", token.line, token.column)
                 }
@@ -210,36 +222,32 @@ impl Parser {
                             SemiColon => {}
                             _ => statement.push_str(&self.parse_assignment(tokens, variables, ident))
                         }
-                        // match &token.token_type {
-                        //     I32 => {
-                        //         let variable_properties = VariableProperties {
-                        //             variable_type: "i32".to_string(),
-                        //             is_mutable: false
-                        //         };
-                        //         variables.insert(ident.clone(), variable_properties);
-                        //         let peeked_token = tokens.peek().unwrap();
-                        //         match peeked_token.token_type {
-                        //             NewLine => {},
-                        //             SemiColon => {}
-                        //             _ => statement.push_str(&self.parse_assignment(tokens, variables, ident))
-                        //         }
-                                
-                        //     }
-                        //     Ident(ident) => todo!("let decleration with custom types"),
-                        //     t => panic!("Syntax Error: expected type, found {t:?} at {}:{} ", token.line, token.column)
-
-                        // }
                     }
                     t => panic!("Syntax Error: expected identifier, found {t:?} at {}:{} ", token.line, token.column)
                 }
+            }
+            If => {
+                let expression = self.parse_expression(tokens, variables);
+                if expression.expression_type != "bool".to_string() {
+                    panic!("Error: expected bool type found {} at {}:{}", expression.expression_type, token.line, token.column)
+                } 
+                statement.push_str(&expression.byte_code);
+                let if_label = format!("ifendL{}C{}", token.line, token.column);
+                statement.push_str(&format!("    jpz \"{if_label}\"\n"));
+                let scope = self.parse_scope(tokens, scope_return_type);
+                statement.push_str(&scope);
+                statement.push_str(&format!("@{if_label}\n"));
 
             }
             Ident(ident) => {
-                let variable_properties = variables.get(ident).unwrap();
-                if !variable_properties.is_mutable {
-                    panic!("Error: tried mutating variable {ident} but it is immutable, found at {}:{}", token.line, token.column)
+                if let Some(variable_properties) = variables.get(ident) {
+                    if !variable_properties.is_mutable {
+                        panic!("Error: tried mutating variable {ident} but it is immutable, found at {}:{}", token.line, token.column)
+                    }
+                    statement.push_str(&self.parse_assignment(tokens, variables, ident));
+                } else {
+                    panic!("Error: variable {ident} does not exist, found at {}:{}", token.line, token.column)
                 }
-                statement.push_str(&self.parse_assignment(tokens, variables, ident));
             }
 
             t => panic!("Syntax Error: expected statement, found {t:?} at {}:{} ", token.line, token.column)
@@ -251,6 +259,149 @@ impl Parser {
             t => panic!("Syntax Error: expected newline or semicolon, found {t:?} at {}:{} ", token.line, token.column)
         }
         statement
+    }
+
+    fn parse_expression <'a, I: Iterator<Item = &'a Token>>(&mut self, tokens: &mut Peekable<I>, variables: &HashMap<String, VariableProperties>) -> ExpressionReturn {
+        let mut expression = ExpressionReturn {
+            expression_type: String::new(),
+            byte_code: String::new()
+        };
+        let mut expression_tokens = Vec::new();
+        while match tokens.peek().unwrap().token_type {
+            Ident(_) => true,
+            DoubleEqual => true,
+            NumberLit(_) => true,
+            _ => false
+        } {
+
+            let token = tokens.next().unwrap();
+            expression_tokens.push(token);
+        }
+        let expr_tokens: Peekable<std::slice::Iter<'_, &'a Token>> = expression_tokens.iter().peekable();
+        fn collect_expr<'a>(mut tokens: Peekable<std::slice::Iter<'_, &'a Token>>, variables: &HashMap<String, VariableProperties>) -> Expression {
+            let token = tokens.next().unwrap();
+            match &token.token_type {
+                NumberLit(num) => {
+                    if let Some(token) = tokens.next() {
+                        // token needs to be an operation
+                        match &token.token_type {
+                            DoubleEqual => {
+                                if let Some(token) = tokens.clone().peek() {
+                                    let mut num_type = "i64".to_string();
+                                    let rhs = collect_expr(tokens, variables);
+                                    match &rhs {
+                                        Expression::Variable(ident) => {
+                                            let prop = variables.get(ident).unwrap();
+                                            num_type = prop.variable_type.clone()
+                                        },
+                                        Expression::Conditional { 
+                                            condition: _, 
+                                            lhs: _, 
+                                            rhs: _ 
+                                        } => panic!("Error: can not chain conditionals together like at {}:{}", token.line, token.column), 
+                                        _ => {}
+                                    }
+                                    return Expression::Conditional {
+                                        condition: Condition::Equal,
+                                        lhs: Box::new(Expression::Value {
+                                            expr_type: num_type,
+                                            value: Value::Number(num.clone())
+                                        }),
+                                        rhs: Box::new(rhs)
+                                    }
+                                } else {
+                                    panic!("Syntax Error: expected ident or literal found nothing at {}:{}", token.line, token.column)
+                                }
+                            }
+                            op => todo!("operation: {op:?} not implemented")
+                        }
+                    } else {
+                        return Expression::Value {
+                            expr_type: "i64".to_string(),
+                            value: Value::Number(num.clone())
+                        }
+                    }
+                },
+                Ident(ident) => {
+                    if !variables.contains_key(ident) {
+                        panic!("Error: variable {ident} has not been declared in the scope but is used at {}:{}", token.line, token.column)
+                    }
+                    if let Some(token) = tokens.next() {
+                        // token needs to be an operation
+                        match &token.token_type {
+                            DoubleEqual => {
+                                if let Some(_) = tokens.peek() {
+                                    return Expression::Conditional {
+                                        condition: Condition::Equal,
+                                        lhs: Box::new(Expression::Variable(ident.to_string())),
+                                        rhs: Box::new(collect_expr(tokens, variables))
+                                    }
+                                } else {
+                                    panic!("Syntax Error: expected ident or literal found nothing at {}:{}", token.line, token.column)
+                                }
+                            }
+                            op => todo!("operation: {op:?} not implemented")
+                        }
+                    } else {
+                        return Expression::Variable(ident.to_string())
+                    }
+                }
+                wrong_token => panic!("Syntax Error: expected ident or literal found {wrong_token:?} at {}:{}", token.line, token.column)
+            }
+
+        }
+        fn parse_expr_tree(expr: &Expression, variables: &HashMap<String, VariableProperties>) -> String {
+            let mut expr_string = String::new();
+            match expr {
+                Expression::Variable(ident) => expr_string.push_str(&format!("    get %{}\n", ident)),
+                Expression::Value {
+                    expr_type,
+                    value
+                } => match value {
+                    Value::Custom(_) => todo!("custom types not implemented"),
+                    Value::Number(number) => expr_string.push_str(&format!("    {expr_type} push {number}\n")),
+                },
+                Expression::Conditional { 
+                    condition, 
+                    lhs, 
+                    rhs
+                } => {
+                    expr_string.push_str(&parse_expr_tree(lhs, variables));
+                    expr_string.push_str(&parse_expr_tree(rhs, variables));
+                    let mut operation_type = "i64".to_string();
+                    match &**lhs {
+                        Expression::Value { expr_type, value: _ } => operation_type = expr_type.clone(),
+                        Expression::Variable(ident) => operation_type = variables.get(ident).unwrap().variable_type.clone(),
+                        _ => {}
+                    }
+                    match &**rhs {
+                        Expression::Value { expr_type, value: _ } => operation_type = expr_type.clone(),
+                        Expression::Variable(ident) => operation_type = variables.get(ident).unwrap().variable_type.clone(),
+                        _ => {}
+                    }
+                    match condition {
+                        Condition::Equal => expr_string.push_str(&format!("    {operation_type} eq\n")),
+                        Condition::NotEqual => todo!(),
+                    }
+                    expr_string.push_str("    cast i8\n");
+                },
+            }
+            expr_string
+        }
+        let expression_tree = collect_expr(expr_tokens, variables);
+        dbg!(&expression_tree);
+        let byte_code = parse_expr_tree(&expression_tree, variables);
+        dbg!(&byte_code);
+
+        expression.byte_code = byte_code.clone();
+
+        match &expression_tree {
+            Expression::Variable(ident) => expression.expression_type = variables.get(ident).unwrap().variable_type.clone(),
+            Expression::Value { expr_type, value: _ } => expression.expression_type = expr_type.clone(),
+            Expression::Conditional { condition: _, lhs: _, rhs: _ } => expression.expression_type = "bool".to_string(),
+        }
+
+        expression
     }
 
     fn parse_assignment<'a, I: Iterator<Item = &'a Token>>(&mut self, tokens: &mut Peekable<I>, variables: &mut HashMap<String, VariableProperties>, variable: &String) -> String {

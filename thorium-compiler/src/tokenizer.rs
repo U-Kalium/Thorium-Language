@@ -1,6 +1,6 @@
 use std::{fmt::Display, fs::File};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 
 pub enum Number {
     Float(f64),
@@ -36,6 +36,9 @@ pub enum TokenType {
     NumberLit(Number),
     Var,
     Let,
+    If,
+    DoubleEqual,
+    Bool,
     Equal,
     Colon,
     Add,
@@ -76,6 +79,18 @@ pub fn tokanize(content: String) -> Vec<Token> {
             } else if &buffer == &String::from("return") {
                 tokens.push(Token {
                     token_type: TokenType::Return,
+                    line: file_line,
+                    column: column - buffer.len() as u32
+                }); 
+            } else if &buffer == &String::from("if") {
+                tokens.push(Token {
+                    token_type: TokenType::If,
+                    line: file_line,
+                    column: column - buffer.len() as u32
+                }); 
+            } else if &buffer == &String::from("bool") {
+                tokens.push(Token {
+                    token_type: TokenType::Bool,
                     line: file_line,
                     column: column - buffer.len() as u32
                 }); 
@@ -187,12 +202,21 @@ pub fn tokanize(content: String) -> Vec<Token> {
                     content_chars.next();
                 },
                 '=' => {
-                    tokens.push(Token {
-                        token_type: TokenType::Equal,
-                        line: file_line,
-                        column: column - 1
-                    });
                     content_chars.next();
+                    if *content_chars.peek().unwrap() == '=' {
+                        content_chars.next();
+                        tokens.push(Token {
+                            token_type: TokenType::DoubleEqual,
+                            line: file_line,
+                            column: column - 2
+                        });
+                    } else {
+                        tokens.push(Token {
+                            token_type: TokenType::Equal,
+                            line: file_line,
+                            column: column - 1
+                        });
+                    }
                 },
                 ':' => {
                     tokens.push(Token {
