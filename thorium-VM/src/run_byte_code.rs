@@ -167,6 +167,110 @@ fn run_func(tokens: &mut TokenIter, state: &mut MachineState, func_index: usize)
             Word(Get) => {
                 run_variable_get(tokens, state);
             }
+            Word(Cast) => {
+                token = tokens.next();
+                match token.token_type {
+                    Word(I32) => {
+                        if let Some(value) = state.stack.pop() {
+                            state.stack.push(StackValue::I32(match value {
+                                StackValue::F32(val) => val as i32,
+                                StackValue::F64(val) => val as i32,
+                                StackValue::I128(val) => val as i32,
+                                StackValue::I64(val) => val as i32,
+                                StackValue::I32(val) => val as i32,
+                                StackValue::I16(val) => val as i32,
+                                StackValue::I8(val) => val as i32,
+                                StackValue::Null => panic!("Error: tried casting to null at {}:{}", token.line, token.column)
+                            }));
+                        }
+                    },
+                    Word(I64) => {
+                        if let Some(value) = state.stack.pop() {
+                            state.stack.push(StackValue::I64(match value {
+                                StackValue::F32(val) => val as i64,
+                                StackValue::F64(val) => val as i64,
+                                StackValue::I128(val) => val as i64,
+                                StackValue::I64(val) => val as i64,
+                                StackValue::I32(val) => val as i64,
+                                StackValue::I16(val) => val as i64,
+                                StackValue::I8(val) => val as i64,
+                                StackValue::Null => panic!("Error: tried casting to null at {}:{}", token.line, token.column)
+                            }));
+                        }
+                    },
+                    Word(I128) => {
+                        if let Some(value) = state.stack.pop() {
+                            state.stack.push(StackValue::I128(match value {
+                                StackValue::F32(val) => val as i128,
+                                StackValue::F64(val) => val as i128,
+                                StackValue::I128(val) => val as i128,
+                                StackValue::I64(val) => val as i128,
+                                StackValue::I32(val) => val as i128,
+                                StackValue::I16(val) => val as i128,
+                                StackValue::I8(val) => val as i128,
+                                StackValue::Null => panic!("Error: tried casting to null at {}:{}", token.line, token.column)
+                            }));
+                        }
+                    },
+                    Word(I16) => {
+                        if let Some(value) = state.stack.pop() {
+                            state.stack.push(StackValue::I16(match value {
+                                StackValue::F32(val) => val as i16,
+                                StackValue::F64(val) => val as i16,
+                                StackValue::I128(val) => val as i16,
+                                StackValue::I64(val) => val as i16,
+                                StackValue::I32(val) => val as i16,
+                                StackValue::I16(val) => val as i16,
+                                StackValue::I8(val) => val as i16,
+                                StackValue::Null => panic!("Error: tried casting to null at {}:{}", token.line, token.column)
+                            }));
+                        }
+                    },
+                    Word(I8) => {
+                        if let Some(value) = state.stack.pop() {
+                            state.stack.push(StackValue::I8(match value {
+                                StackValue::F32(val) => val as i8,
+                                StackValue::F64(val) => val as i8,
+                                StackValue::I128(val) => val as i8,
+                                StackValue::I64(val) => val as i8,
+                                StackValue::I32(val) => val as i8,
+                                StackValue::I16(val) => val as i8,
+                                StackValue::I8(val) => val as i8,
+                                StackValue::Null => panic!("Error: tried casting to null at {}:{}", token.line, token.column)
+                            }));
+                        }
+                    },
+                    Word(F32) => {
+                        if let Some(value) = state.stack.pop() {
+                            state.stack.push(StackValue::F32(match value {
+                                StackValue::F32(val) => val as f32,
+                                StackValue::F64(val) => val as f32,
+                                StackValue::I128(val) => val as f32,
+                                StackValue::I64(val) => val as f32,
+                                StackValue::I32(val) => val as f32,
+                                StackValue::I16(val) => val as f32,
+                                StackValue::I8(val) => val as f32,
+                                StackValue::Null => panic!("Error: tried casting to null at {}:{}", token.line, token.column)
+                            }));
+                        }
+                    },
+                    Word(F64) => {
+                        if let Some(value) = state.stack.pop() {
+                            state.stack.push(StackValue::F64(match value {
+                                StackValue::F32(val) => val as f64,
+                                StackValue::F64(val) => val as f64,
+                                StackValue::I128(val) => val as f64,
+                                StackValue::I64(val) => val as f64,
+                                StackValue::I32(val) => val as f64,
+                                StackValue::I16(val) => val as f64,
+                                StackValue::I8(val) => val as f64,
+                                StackValue::Null => panic!("Error: tried casting to null at {}:{}", token.line, token.column)
+                            }));
+                        }
+                    },
+                    wrong_token=> panic!("Error: expected type found {wrong_token:?} at {}:{}", token.line, token.column)
+                }
+            }
             wrong_token => panic!("Syntax Error: Did not expect {wrong_token:?} at {}:{}", token.line, token.column)
         }
     }

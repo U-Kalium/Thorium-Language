@@ -59,6 +59,7 @@ pub enum WordToken {
     Min,
     Jmp,
     Jpz,
+    Cast
 }
 
 pub fn tokenize(content: String) -> Result<Vec<Token>, String> {
