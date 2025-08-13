@@ -182,6 +182,7 @@ impl Parser {
                     }
                     t => panic!("Syntax Error: expected i32 after return, found {t:?} at {}:{} ", token.line, token.column)
                 }
+                statement.push_str("    return\n");
             }
             Var => {
                 token = tokens.next().unwrap();

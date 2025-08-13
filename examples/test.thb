@@ -16,6 +16,8 @@ func $main:
     cast i8
     jpz "ifendL4C5"
     i32 push 1
+    return
 @ifendL4C5
     i32 push 4
+    return
 endfunc
