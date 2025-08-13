@@ -1,3 +1,4 @@
+use core::panic;
 use std::collections::HashMap;
 
 use crate::tokenizer::{Token};
@@ -20,6 +21,21 @@ enum StackValue {
     F32(f32),
     F64(f64),
     Null
+}
+
+impl StackValue {
+    fn is_zero(&self) -> bool {
+        match self {
+            StackValue::I128(val) => *val == 0,
+            StackValue::I64(val) => *val == 0,
+            StackValue::I32(val) => *val == 0,
+            StackValue::I16(val) => *val == 0,
+            StackValue::I8(val) => *val == 0,
+            StackValue::F32(val) => *val == 0.0,
+            StackValue::F64(val) => *val == 0.0,
+            StackValue::Null => false,
+        }
+    }
 }
 
 impl MachineState {
@@ -70,14 +86,56 @@ pub fn run(tokens: &Vec<Token>) {
 
 fn run_func(tokens: &mut TokenIter, state: &mut MachineState, func_index: usize) {
     tokens.index = func_index;
+    let mut labels = HashMap::new();
+    // finding labels
     while tokens.peek().token_type != Word(EndFunc) {
         let token = tokens.next();
+        if let LabelIdent(ident) = token.token_type {
+            labels.insert(ident.clone(), tokens.index);
+        }
+    }
+    tokens.index = func_index;
+    while tokens.peek().token_type != Word(EndFunc) {
+        let mut token = tokens.next();
         match token.token_type {
+            LabelIdent(_) => {
+
+            }
             Word(Call) => {
                 run_call(tokens, state);
             }
             Word(Return) => {
                 break;
+            }
+            Word(Jmp) => {
+                token = tokens.next();
+                if let StringLit(ident) = token.token_type {
+                    if let Some(index) = labels.get(&ident) {
+                        let value = state.stack.pop().unwrap();
+                        if !value.is_zero() {
+                            tokens.index = *index
+                        }
+                    } else {
+                        panic!("Error: label {ident} does not exist yet is reffered to at {}:{}", token.line, token.column)
+                    }
+                } else {
+                    panic!("Error expected string lit found {:?} at {}:{}", token.token_type, token.line, token.column);
+                }
+            }
+            Word(Jpz) => {
+                token = tokens.next();
+                if let StringLit(ident) = token.token_type {
+                    if let Some(index) = labels.get(&ident) {
+                        let value = state.stack.pop().unwrap();
+                        if value.is_zero() {
+                            tokens.index = *index
+                        }
+                    } else {
+                        panic!("Error: label {ident} does not exist yet is reffered to at {}:{}", token.line, token.column)
+                    }
+                } else {
+                    panic!("Error expected string lit found {:?} at {}:{}", token.token_type, token.line, token.column);
+                }
             }
             Word(I128) => {
                 run_numeric_instruction(tokens, state, NumericType::I128);
@@ -410,11 +468,11 @@ fn process_numerical_op(state: &mut MachineState, node_type: NumericType, operat
     let rhs = state
         .stack
         .pop()
-        .expect("Tried popping from empty track during numerical operation");
+        .expect("Tried popping from empty stack during numerical operation");
     let lhs = state
         .stack
         .pop()
-        .expect("Tried popping from empty track during numerical operation");
+        .expect("Tried popping from empty stack during numerical operation");
 
     match node_type {
         NumericType::I32 => {

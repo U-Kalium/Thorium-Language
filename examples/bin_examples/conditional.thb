@@ -1,0 +1,17 @@
+func $start "_start" :
+    call $main
+endfunc
+
+func $main:
+    declare %a
+    i64 push 10
+    set %a
+    @labelA
+    get %a
+    i64 push 1
+    i64 sub
+    set %a
+    get %a
+    jmp "labelA"
+    get %a
+endfunc
