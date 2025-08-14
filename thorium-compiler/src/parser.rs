@@ -122,7 +122,8 @@ impl Parser {
         func.push_str(":\n");
 
         // func body
-        func.push_str(&self.parse_scope(tokens, func_type.returns.clone()));
+        let mut func_variables = HashMap::new();
+        func.push_str(&self.parse_scope(tokens, func_type.returns.clone(), &mut func_variables));
         func.push_str("endfunc");
         
         self.functions.insert(func_name, func_type);
@@ -130,8 +131,8 @@ impl Parser {
         func
     }
 
-    fn parse_scope<'a, I: Iterator<Item = &'a Token>>(&mut self, tokens: &mut Peekable<I>, return_type: Vec<String>) -> String  {
-        let mut variables = HashMap::new();
+    fn parse_scope<'a, I: Iterator<Item = &'a Token>>(&mut self, tokens: &mut Peekable<I>, return_type: Vec<String>, variables: &mut HashMap<String, VariableProperties>) -> String  {
+        // let mut variables = HashMap::new();
         let mut scope = String::new();
         let mut token = tokens.next().unwrap();
         match &token.token_type {
@@ -140,7 +141,7 @@ impl Parser {
         }
         token = tokens.next().unwrap();
         while token.token_type != CloseCurlyBracket{
-            scope.push_str(&self.parse_statement(tokens, &mut variables, return_type.clone()));
+            scope.push_str(&self.parse_statement(tokens, variables, return_type.clone()));
             token = tokens.peek().unwrap();
         }
         tokens.next();
@@ -157,16 +158,64 @@ impl Parser {
             I8 => parsed_type = "i8".to_string(),
             F64 => parsed_type = "f64".to_string(),
             F32 => parsed_type = "f32".to_string(),
+            Bool => parsed_type = "bool".to_string(),
             Ident(_ident) => todo!("Custom types parsing"),
             t => panic!("Syntax Error: expected type, found {t:?} at {}:{} ", token.line, token.column)
         }
 
         parsed_type
     }
-
+    
     fn parse_statement<'a, I: Iterator<Item = &'a Token>>(&mut self, tokens: &mut Peekable<I>, variables: &mut HashMap<String, VariableProperties>, scope_return_type: Vec<String>) -> String {
         let mut statement = String::new();
         let mut token = tokens.next().unwrap();
+        fn parse_else<'a, I: Iterator<Item = &'a Token>>(
+            parser: &mut Parser,
+            tokens: &mut Peekable<I>, 
+            variables: &mut HashMap<String, VariableProperties>, 
+            // token: &'a Token, 
+            scope_return_type: Vec<String>, 
+            statement: &mut String
+        ) {
+            tokens.next();
+            let peeked = tokens.peek().unwrap();
+            if let If = peeked.token_type {
+                let token = tokens.next().unwrap();
+                parse_if(parser, tokens, variables, token, scope_return_type, statement);
+            } else {
+                statement.push_str(&parser.parse_scope(tokens, scope_return_type, variables))
+            }
+        }
+        fn parse_if<'a, I: Iterator<Item = &'a Token>>(
+            parser: &mut Parser,
+            tokens: &mut Peekable<I>, 
+            variables: &mut HashMap<String, VariableProperties>, 
+            token: &'a Token, 
+            scope_return_type: Vec<String>, 
+            statement: &mut String
+        ) {
+            let expression = parser.parse_expression(tokens, variables);
+            if expression.expression_type != "bool".to_string() {
+                panic!("Error: expected bool type found {} at {}:{}", expression.expression_type, token.line, token.column)
+            }
+            statement.push_str(&expression.byte_code);
+
+            let scope = parser.parse_scope(tokens, scope_return_type.clone(), variables);
+   
+            let end_if_label = format!("ifendL{}C{}", token.line, token.column);
+            let else_label = format!("elseL{}C{}", token.line, token.column);
+            statement.push_str(&format!("    jpz \"{else_label}\"\n"));
+            statement.push_str(&scope);
+            statement.push_str(&format!("    i8 push 1\n"));
+            statement.push_str(&format!("    jmp \"{end_if_label}\"\n"));
+            statement.push_str(&format!("@{else_label}\n"));
+            let else_token=  tokens.peek().unwrap();
+            if let Else = else_token.token_type {
+                parse_else(parser, tokens, variables, scope_return_type, statement);
+            }
+            statement.push_str(&format!("@{end_if_label}\n"));
+        }
+
         match &token.token_type {
             Return => {
                 token = tokens.next().unwrap();
@@ -228,16 +277,7 @@ impl Parser {
                 }
             }
             If => {
-                let expression = self.parse_expression(tokens, variables);
-                if expression.expression_type != "bool".to_string() {
-                    panic!("Error: expected bool type found {} at {}:{}", expression.expression_type, token.line, token.column)
-                } 
-                statement.push_str(&expression.byte_code);
-                let if_label = format!("ifendL{}C{}", token.line, token.column);
-                statement.push_str(&format!("    jpz \"{if_label}\"\n"));
-                let scope = self.parse_scope(tokens, scope_return_type);
-                statement.push_str(&scope);
-                statement.push_str(&format!("@{if_label}\n"));
+                parse_if(self, tokens, variables, token, scope_return_type, &mut statement);
 
             }
             Ident(ident) => {
@@ -331,11 +371,34 @@ impl Parser {
                         // token needs to be an operation
                         match &token.token_type {
                             DoubleEqual => {
-                                if let Some(_) = tokens.peek() {
+                                // if let Some(_) = tokens.peek() {
+                                //     return Expression::Conditional {
+                                //         condition: Condition::Equal,
+                                //         lhs: Box::new(Expression::Variable(ident.to_string())),
+                                //         rhs: Box::new(collect_expr(tokens, variables))
+                                //     }
+                                // } else {
+                                //     panic!("Syntax Error: expected ident or literal found nothing at {}:{}", token.line, token.column)
+                                // }
+                                if let Some(token) = tokens.clone().peek() {
+                                    let mut num_type = "i64".to_string();
+                                    let mut rhs = collect_expr(tokens, variables);
+                                    match &mut rhs {
+                                        Expression::Value { expr_type, value } => {
+                                            let prop = variables.get(ident).unwrap();
+                                            *expr_type = prop.variable_type.clone()
+                                        }
+                                        Expression::Conditional { 
+                                            condition: _, 
+                                            lhs: _, 
+                                            rhs: _ 
+                                        } => panic!("Error: can not chain conditionals together like at {}:{}", token.line, token.column), 
+                                        _ => {}
+                                    }
                                     return Expression::Conditional {
                                         condition: Condition::Equal,
                                         lhs: Box::new(Expression::Variable(ident.to_string())),
-                                        rhs: Box::new(collect_expr(tokens, variables))
+                                        rhs: Box::new(rhs)
                                     }
                                 } else {
                                     panic!("Syntax Error: expected ident or literal found nothing at {}:{}", token.line, token.column)
@@ -390,9 +453,9 @@ impl Parser {
             expr_string
         }
         let expression_tree = collect_expr(expr_tokens, variables);
-        dbg!(&expression_tree);
+        // dbg!(&expression_tree);
         let byte_code = parse_expr_tree(&expression_tree, variables);
-        dbg!(&byte_code);
+        // dbg!(&byte_code);
 
         expression.byte_code = byte_code.clone();
 
@@ -411,7 +474,7 @@ impl Parser {
         match &peeked_token.token_type {
             OpenCurlyBracket => {
                 let varibale_type = variables.get(variable).unwrap().variable_type.clone();
-                assignment.push_str(&self.parse_scope(tokens, vec![varibale_type]))
+                assignment.push_str(&self.parse_scope(tokens, vec![varibale_type], variables))
             },
             Equal => {
                 tokens.next().unwrap();
@@ -430,6 +493,20 @@ impl Parser {
                         } else {
                             panic!("Error: tried assigning an unkown identifier {ident} to variable {variable}");
 
+                        }
+                    },
+                    True => {
+                        if variable_type == "bool".to_string() {
+                            assignment.push_str(&format!("    i8 push 1"));
+                        } else {
+                            panic!("Error: tried assigning a bool type to {:?} at {}:{}", token.token_type, token.line, token.column)
+                        }
+                    }
+                    False => {
+                        if variable_type == "bool".to_string() {
+                            assignment.push_str(&format!("    i8 push 0"));
+                        } else {
+                            panic!("Error: tried assigning a bool type to {:?} at {}:{}", token.token_type, token.line, token.column)
                         }
                     }
                     t => panic!("Syntax Error: expected int or variable, found {t:?} at {}:{} ", token.line, token.column)

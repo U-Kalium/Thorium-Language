@@ -37,8 +37,11 @@ pub enum TokenType {
     Var,
     Let,
     If,
+    Else,
     DoubleEqual,
     Bool,
+    True,
+    False,
     Equal,
     Colon,
     Add,
@@ -82,6 +85,12 @@ pub fn tokanize(content: String) -> Vec<Token> {
                     line: file_line,
                     column: column - buffer.len() as u32
                 }); 
+            } else if &buffer == &String::from("else") {
+                tokens.push(Token {
+                    token_type: TokenType::Else,
+                    line: file_line,
+                    column: column - buffer.len() as u32
+                }); 
             } else if &buffer == &String::from("if") {
                 tokens.push(Token {
                     token_type: TokenType::If,
@@ -91,6 +100,18 @@ pub fn tokanize(content: String) -> Vec<Token> {
             } else if &buffer == &String::from("bool") {
                 tokens.push(Token {
                     token_type: TokenType::Bool,
+                    line: file_line,
+                    column: column - buffer.len() as u32
+                }); 
+            } else if &buffer == &String::from("true") {
+                tokens.push(Token {
+                    token_type: TokenType::True,
+                    line: file_line,
+                    column: column - buffer.len() as u32
+                }); 
+            } else if &buffer == &String::from("false") {
+                tokens.push(Token {
+                    token_type: TokenType::False,
                     line: file_line,
                     column: column - buffer.len() as u32
                 }); 

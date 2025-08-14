@@ -5,19 +5,36 @@ func $start "_start" :
 
 func $main:
     declare %a
-    i32 push 10
+    i32 push 12
     set %a
     declare %b
     i32 push 10
     set %b
+    declare %c
+    i32 push 5
+    set %c
     get %a
     get %b
     i32 eq
     cast i8
-    jpz "ifendL4C5"
-    i32 push 1
-    return
-@ifendL4C5
-    i32 push 4
+    jpz "elseL5C5"
+    i32 push 6
+    set %c
+    i8 push 1
+    jmp "ifendL5C5"
+@elseL5C5
+    get %a
+    i32 push 11
+    i32 eq
+    cast i8
+    jpz "elseL7C12"
+    i32 push 0
+    set %c
+    i8 push 1
+    jmp "ifendL7C12"
+@elseL7C12
+@ifendL7C12
+@ifendL5C5
+    get %c
     return
 endfunc

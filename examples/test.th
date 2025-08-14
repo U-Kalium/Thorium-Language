@@ -1,8 +1,11 @@
 fn main() i32 {
-    let a i32 = 10
+    let a i32 = 12
     let b i32 = 10
+    var c i32 = 5
     if a == b {
-        return 1
-    }
-    return 4
+        c = 6
+    } else if a == 11 {
+        c = 0
+    } 
+    return c
 }
