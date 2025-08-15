@@ -199,3 +199,22 @@ character1.update()
 
 */
 
+
+/*
+    loops
+*/
+
+// foreach loop
+loop i in array {
+
+}
+
+// While loop
+loop true {
+
+}
+
+// for loop
+loop var i = 0; i < 10; i += 1 {
+
+}
