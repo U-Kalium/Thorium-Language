@@ -16,9 +16,11 @@ pub enum TokenType {
     FullStop,
     Number(i128),
     StringLit(String),
+    CharLit(char),
     EOF,
     VarIdent(String),
     Dash,
+    Comma,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -59,7 +61,11 @@ pub enum WordToken {
     Min,
     Jmp,
     Jpz,
-    Cast
+    Cast,
+    Insert,
+    Grow,
+    Remove,
+    Mem
 }
 
 pub fn tokenize(content: String) -> Result<Vec<Token>, String> {
@@ -100,6 +106,7 @@ pub fn tokenize(content: String) -> Result<Vec<Token>, String> {
                 buffer.push(content_chars.next().unwrap());
                 column += 1;
             }
+                // dbg!(&buffer);
             tokens.push(Token {
                 token_type: TokenType::Number(buffer.parse().expect("could not parse integer")),
                 line: file_line,
@@ -188,9 +195,31 @@ pub fn tokenize(content: String) -> Result<Vec<Token>, String> {
                         column: column - buffer.len() as u32 - 1
                     });
                 }
+                '\'' => {
+                    content_chars.next();
+                    while content_chars.peek().is_some_and(|char| *char != '\'') {
+                        buffer.push(content_chars.next().unwrap());
+                        column += 1;
+                    }
+                    content_chars.next();
+
+                    tokens.push(Token {
+                        token_type: TokenType::CharLit(buffer.parse().unwrap()),
+                        line: file_line,
+                        column: column - buffer.len() as u32 -1
+                    });
+                }
                 '-' => {
                     tokens.push(Token {
                         token_type: TokenType::Dash,
+                        line: file_line,
+                        column: column - 1
+                    });
+                    content_chars.next();
+                }
+                ',' => {
+                    tokens.push(Token {
+                        token_type: TokenType::Comma,
                         line: file_line,
                         column: column - 1
                     });

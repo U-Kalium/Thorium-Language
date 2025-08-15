@@ -1,0 +1,11 @@
+func $start "_start" :
+
+    insert 'C','H', 'A', 'R', 'S'
+    insert "Hello from Thorium"
+    call $printMemory
+    remove 0 5
+    call $printMemory
+    insert "abcdefghijklmnopqrs"
+    insert 'C', 'C', 'C', 'C', 'C'  
+    call $printMemory
+endfunc
