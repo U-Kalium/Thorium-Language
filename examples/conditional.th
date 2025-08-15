@@ -2,14 +2,14 @@ fn main() i32 {
     let a i32 = 11
     let b i32 = 12
     if a == b {
-        return 1
+        finish 1
     } else if a == 10 {
-        return 2
+        finish 2
     } else {
         let c bool = false 
         if c {
-            return 3
+            finish 3
         }
     }
-    return 4
+    finish 4
 }

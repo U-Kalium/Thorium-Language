@@ -9,5 +9,5 @@ fn main() f32 {
     }
     var e f32 = 3.14
     let f f64 = 33.3333
-    return e
+    finish e
 }

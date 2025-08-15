@@ -30,7 +30,7 @@ struct ExpressionReturn {
 
 enum Value {
     Custom(String),
-    Number(Number),
+    Number(String),
 }
 #[derive(Debug, Clone)]
 enum Condition {
@@ -256,7 +256,7 @@ impl Parser {
         }
 
         match &token.token_type {
-            Return => {
+            Finish => {
                 token = tokens.next().unwrap();
                 match &token.token_type {
                     NumberLit(number) => {
@@ -278,6 +278,29 @@ impl Parser {
                     ),
                 }
                 statement.push_str("    return\n");
+            }
+            Return => {
+                token = tokens.next().unwrap();
+                match &token.token_type {
+                    NumberLit(number) => {
+                        statement
+                            .push_str(&format!("    {} push {number}\n", scope_return_type[0]));
+                    }
+                    Ident(ident) => {
+                        if !variables.contains_key(ident) {
+                            panic!(
+                                "Error: Variable {ident} does not exist yet was used at {}:{}",
+                                token.line, token.column
+                            )
+                        }
+                        statement.push_str(&format!("    get %{ident}\n"));
+                    }
+                    t => panic!(
+                        "Syntax Error: expected i32 after return, found {t:?} at {}:{} ",
+                        token.line, token.column
+                    ),
+                }
+                // statement.push_str("    return\n");
             }
             Var => {
                 token = tokens.next().unwrap();

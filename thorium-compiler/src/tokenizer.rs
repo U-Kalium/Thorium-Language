@@ -32,8 +32,11 @@ pub enum TokenType {
     CloseCurlyBracket,
     OpenAngleBracket,
     CloseAngleBracket,
+    OpenSquareBracket,
+    CloseSquareBracket,
     Return,
-    NumberLit(Number),
+    Finish,
+    NumberLit(String),
     Var,
     Let,
     If,
@@ -85,6 +88,12 @@ pub fn tokanize(content: String) -> Vec<Token> {
             } else if &buffer == &String::from("return") {
                 tokens.push(Token {
                     token_type: TokenType::Return,
+                    line: file_line,
+                    column: column - buffer.len() as u32,
+                });
+            } else if &buffer == &String::from("finish") {
+                tokens.push(Token {
+                    token_type: TokenType::Finish,
                     line: file_line,
                     column: column - buffer.len() as u32,
                 });
@@ -187,6 +196,22 @@ pub fn tokanize(content: String) -> Vec<Token> {
                 ')' => {
                     tokens.push(Token {
                         token_type: TokenType::CloseBracket,
+                        line: file_line,
+                        column: column - 1,
+                    });
+                    content_chars.next();
+                }
+                '[' => {
+                    tokens.push(Token {
+                        token_type: TokenType::OpenSquareBracket,
+                        line: file_line,
+                        column: column - 1,
+                    });
+                    content_chars.next();
+                }
+                ']' => {
+                    tokens.push(Token {
+                        token_type: TokenType::CloseSquareBracket,
                         line: file_line,
                         column: column - 1,
                     });
@@ -296,13 +321,13 @@ pub fn tokanize(content: String) -> Vec<Token> {
                     column += 1
                 }
                 tokens.push(Token {
-                    token_type: TokenType::NumberLit(Number::Float(buffer.parse().unwrap())),
+                    token_type: TokenType::NumberLit(buffer.clone()),
                     line: file_line,
                     column: column - buffer.len() as u32,
                 });
             } else {
                 tokens.push(Token {
-                    token_type: TokenType::NumberLit(Number::Int(buffer.parse().unwrap())),
+                    token_type: TokenType::NumberLit(buffer.clone()),
                     line: file_line,
                     column: column - buffer.len() as u32,
                 });

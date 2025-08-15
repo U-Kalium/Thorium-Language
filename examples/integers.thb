@@ -23,4 +23,5 @@ func $main:
     f64 push 33.3333
     set %f
     get %e
+    return
 endfunc
