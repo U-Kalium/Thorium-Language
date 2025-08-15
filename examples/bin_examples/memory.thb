@@ -2,10 +2,10 @@ func $start "_start" :
 
     insert 'C','H', 'A', 'R', 'S'
     insert "Hello from Thorium"
-    call $printMemory
+    // call $printMemory
     remove 0 5
-    call $printMemory
+    // call $printMemory
     insert "abcdefghijklmnopqrs"
     insert 'C', 'C', 'C', 'C', 'C'  
-    call $printMemory
+    // call $printMemory
 endfunc
