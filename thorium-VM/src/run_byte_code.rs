@@ -219,7 +219,7 @@ pub fn run(tokens: &Vec<Token>) -> Result<(), String>{
         tokens: tokens.clone(),
         index: 0
     };
-    find_funcs(&mut token_iter, &mut state);
+    find_funcs(&mut token_iter, &mut state)?;
     state.functions.insert("printmemory".to_string(), 0);
     // state.functions.get(k)
     println!("funcs: {:?}", state.functions);
@@ -300,7 +300,7 @@ fn run_func(tokens: &mut TokenIter, state: &mut MachineState, func_index: usize)
                 }
             }
             Word(Call) => {
-                run_call(tokens, state);
+                run_call(tokens, state)?
             }
             Word(Return) => {
                 break;
@@ -602,7 +602,7 @@ fn run_numeric_instruction(tokens: &mut TokenIter, state: &mut MachineState, num
                             NumericType::F32 => {
                                 token = tokens.next();
                                 if token.token_type != FullStop {
-                                    panic!("Syntax Error: Expected full stop for float found {:?} at {}:{}",token.token_type,  token.line, token.column)
+                                    return Err(format!("Syntax Error: Expected full stop for float found {:?} at {}:{}",token.token_type,  token.line, token.column))
                                 }
                                 token = tokens.next();
                                 match token.token_type {
@@ -654,7 +654,7 @@ fn run_numeric_instruction(tokens: &mut TokenIter, state: &mut MachineState, num
     }
 }
 
-fn run_call(tokens: &mut TokenIter, state: &mut MachineState) {
+fn run_call(tokens: &mut TokenIter, state: &mut MachineState) -> Result<(), String> {
     let token = tokens.next();
     let call_site_index = tokens.index;
     match token.token_type {
@@ -664,21 +664,22 @@ fn run_call(tokens: &mut TokenIter, state: &mut MachineState) {
                 state.function_stack.push(call_site_index);
                 if ident == "printmemory".to_string() {
                     print_memory(state);
+                    Ok(())
                 } else {
-                    run_func(tokens, state, *func_index);
+                    run_func(tokens, state, *func_index)
                 }
             } else {
-                panic!("Error: tried calling undefined func {ident} at {}:{}", token.line, token.column)
+                return Err(format!("Error: tried calling undefined func {ident} at {}:{}", token.line, token.column))
             }
         }
-        wrong_token => panic!("Syntax Error: Expected function ident found {wrong_token:?} at {}:{}", token.line, token.column)
+        wrong_token => return Err(format!("Syntax Error: Expected function ident found {wrong_token:?} at {}:{}", token.line, token.column))
     }
 }
 fn print_memory(state: &mut MachineState) {
     println!("Memory: {:?}", state.memory)
 }
 
-fn find_funcs(tokens: &mut TokenIter, state: &mut MachineState) {
+fn find_funcs(tokens: &mut TokenIter, state: &mut MachineState) -> Result<(), String> {
     let mut token = tokens.current();
     match token.token_type {
         Word(Func) => {
@@ -690,7 +691,7 @@ fn find_funcs(tokens: &mut TokenIter, state: &mut MachineState) {
                 FuncIdent(ident) => {
                     func_ident = ident
                 }
-                wrong_token => panic!("Syntax Error: Expected function ident found {wrong_token:?} at {}:{}", token.line, token.column)
+                wrong_token => return Err(format!("Syntax Error: Expected function ident found {wrong_token:?} at {}:{}", token.line, token.column))
             }
             token = tokens.next();
             match token.token_type {
@@ -699,11 +700,11 @@ fn find_funcs(tokens: &mut TokenIter, state: &mut MachineState) {
                     token = tokens.next();
                     match token.token_type {
                         Colon => func_index = tokens.index,
-                        wrong_token => panic!("Syntax Error: Expected colon or export found {wrong_token:?} at {}:{}", token.line, token.column)
+                        wrong_token => return Err(format!("Syntax Error: Expected colon or export found {wrong_token:?} at {}:{}", token.line, token.column))
                     }
                 },
                 Colon => func_index = tokens.index,
-                wrong_token => panic!("Syntax Error: Expected colon or export found {wrong_token:?} at {}:{}", token.line, token.column)
+                wrong_token => return Err(format!("Syntax Error: Expected colon or export found {wrong_token:?} at {}:{}", token.line, token.column))
             }
             state.functions.insert(func_ident.clone(), func_index);
             if let Some(export) = func_export {
@@ -712,12 +713,13 @@ fn find_funcs(tokens: &mut TokenIter, state: &mut MachineState) {
         }
         EOF => {
             tokens.reset();
-            return;
+            return Ok(());
         },
         _ => {}
     }
     tokens.next();
-    find_funcs(tokens, state);
+    find_funcs(tokens, state)?;
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -778,7 +780,7 @@ macro_rules! perform_operation {
             NumericeOp::Lt => ($lhs < $rhs) as i32 as $type,
             NumericeOp::Max => $lhs.max($rhs),
             NumericeOp::Min => $lhs.min($rhs),
-            operation => panic!("operation {operation:?} can not be used on a float")
+            operation => return Err(format!("operation {operation:?} can not be used on a float"))
         }
     };
 }
