@@ -13,7 +13,7 @@ mod tokenizer;
 mod tests;
 mod run_byte_code;
 
-fn main() {
+fn main() -> Result<(), String>{
     let command_line_args: Vec<String> = env::args().collect();
 
     let file_name = &command_line_args[1];
@@ -28,7 +28,7 @@ fn main() {
 
     let tokens = tokenize(file_content).unwrap();
 
-    run(&tokens);
+    run(&tokens)
     // println!("tokens: \n {:?}", tokens);
     // let syntax_tree = parse_tokens(&tokens);
     // // println!("tree: \n {:?}", syntax_tree);
