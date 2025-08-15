@@ -1,11 +1,11 @@
 use core::panic;
 use std::collections::HashMap;
-use std::fmt::Display;
 
-use crate::tokenizer::{Token};
+use crate::tokenizer::Token;
 use crate::tokenizer::{TokenType::*, WordToken::*};
+use crate::Error;
 
-const PAGE_SIZE: usize = 8 * 5;
+const PAGE_SIZE: usize = 8 * 64 * 1024;
 const INITIAL_PAGE_AMOUNT: usize = 1;
 
 struct MachineState {
@@ -16,6 +16,50 @@ struct MachineState {
     variables: HashMap<String, StackValue>,
     memory: Memory
 }
+
+#[derive(Debug)]
+pub enum MemoryErrors {
+    PageFull,
+    NotEnoughPages
+}
+
+#[derive(Debug)]
+pub enum SyntaxError {
+    Expected {
+        expected_token: String,
+        found: Token
+    }
+}
+#[derive(Debug)]
+pub enum SemanticError {
+    UndefinedVar {
+        ident: Token
+    },
+    UndefindLabel {
+        ident: Token
+    },
+    UndefinedFunc {
+        ident: Token
+    },
+    IncorrectOperation {
+        operation: NumericeOp,
+        val_type: String
+    }
+}
+#[derive(Debug)]
+pub enum RuntimeError {
+    CastFromNull {
+        token: Token
+    },
+    MismatchLhsRhs {
+        lhs: StackValue,
+        rhs: StackValue
+    },
+    PoppingEmptyStack {
+        popped_into: Token
+    }
+}
+
 
 #[derive(Debug, Clone)]
 struct Page {
@@ -31,15 +75,17 @@ impl Page {
             free_data_map
         }
     }
-    fn insert(&mut self, data: &[u8]) {
+    fn insert(&mut self, data: &[u8]) -> Result<(), MemoryErrors> {
         for (size, pointer) in &mut self.free_data_map {
             let data_size = data.len(); 
             if data_size <= *size {
                 self.data[*pointer..*pointer+data_size].copy_from_slice(data);
                 *size = *size - data_size ;
-                *pointer = *pointer+data_size
+                *pointer = *pointer+data_size;
+                return Ok(());
             }
         }
+        Err(MemoryErrors::PageFull)
 
     }
     fn remove(&mut self, pointer: usize, size: usize) {
@@ -70,18 +116,19 @@ impl Memory {
             // capacity_of_pages: vec![vec![(PAGE_SIZE, 0)]; number_of_pages]
         }
     }
-    fn insert(&mut self, data: &[u8]) {
+    fn insert(&mut self, data: &[u8]) -> Result<(), MemoryErrors> {
         for (page_index, page) in self.pages.clone().iter().enumerate() {
             let free_data_map = &page.free_data_map;
             let data_size = data.len(); 
-            for (size, pointer) in free_data_map.clone() {
+            for (size, _) in free_data_map.clone() {
                 if data_size <= size {
                     // *capacity -= data_size;
-                    self.pages[page_index].insert(data);
-                    break;
+                    self.pages[page_index].insert(data)?;
+                    return Ok(());
                 }
             }
         }
+        Err(MemoryErrors::NotEnoughPages)
     }
 
     fn grow(&mut self, page_amount: usize) {
@@ -100,7 +147,7 @@ impl Memory {
             first_page_amount = size;
             last_page_amount = 0
         } else {
-            first_page_amount = (PAGE_SIZE - in_page_pointer);
+            first_page_amount = PAGE_SIZE - in_page_pointer;
             last_page_amount = amount_of_pages * PAGE_SIZE - first_page_amount - (amount_of_pages - 2) * PAGE_SIZE
         }
         // first page 
@@ -213,7 +260,7 @@ impl TokenIter {
     }
 }
 
-pub fn run(tokens: &Vec<Token>) -> Result<(), String>{
+pub fn run(tokens: &Vec<Token>) -> Result<(), Error>{
     let mut state = MachineState::new();
     let mut token_iter = TokenIter {
         tokens: tokens.clone(),
@@ -228,7 +275,7 @@ pub fn run(tokens: &Vec<Token>) -> Result<(), String>{
     run_func(&mut token_iter, &mut state, start_func_index)
 }
 
-fn run_func(tokens: &mut TokenIter, state: &mut MachineState, func_index: usize) -> Result<(), String> {
+fn run_func(tokens: &mut TokenIter, state: &mut MachineState, func_index: usize) -> Result<(), Error> {
     tokens.index = func_index;
     let mut labels = HashMap::new();
     // finding labels
@@ -248,8 +295,8 @@ fn run_func(tokens: &mut TokenIter, state: &mut MachineState, func_index: usize)
             Word(Insert) => {
                 token = tokens.next();
                 match &token.token_type {
-                    StringLit(string) => state.memory.insert(string.as_bytes()),
-                    Number(number) => state.memory.insert(&number.to_be_bytes()),
+                    StringLit(string) => state.memory.insert(string.as_bytes())?,
+                    Number(number) => state.memory.insert(&number.to_be_bytes())?,
                     CharLit(char) => {
                         let mut chars = String::from(*char);
                         while tokens.peek().token_type == Comma {
@@ -258,19 +305,19 @@ fn run_func(tokens: &mut TokenIter, state: &mut MachineState, func_index: usize)
                             if let CharLit(next_char) = char_token.token_type {
                                 chars.push(next_char);
                             } else {
-                                return Err(format!("Syntax Error: expexted a char literal found {:?}, at {}{}", char_token.token_type, char_token.line, char_token.column ))
+                                return  Err(SyntaxError::Expected { expected_token: "char_lit".to_string(), found: char_token })?;
                             }
                         }
-                        state.memory.insert(chars.as_bytes());
+                        state.memory.insert(chars.as_bytes())?
                     }
-                    wrong_token => return Err(format!("Syntax Error: expected a number, string lit or list of chars found {wrong_token:?} at {}{}", token.line, token.column))
-                }
+                    _ => return Err(SyntaxError::Expected { expected_token: "number, string_lit of list of chars".to_string(), found: token })?
+                };
             }
             Word(Grow) => {
                 token = tokens.next();
                 match &token.token_type {
                     Number(number) => state.memory.grow(*number as usize),
-                    wrong_token => return Err(format!("Syntax Error: expected a number found {wrong_token:?} at {}{}", token.line, token.column))
+                    _ => return  Err(SyntaxError::Expected { expected_token: "number".to_string(), found: token })?
                 }
             }
             Word(Remove) => {
@@ -282,10 +329,10 @@ fn run_func(tokens: &mut TokenIter, state: &mut MachineState, func_index: usize)
                             Number(size) => {
                                 state.memory.remove(*pointer as usize, *size as usize);
                             }
-                            wrong_token => return Err(format!("Syntax Error: expected a number found {wrong_token:?} at {}{}", token.line, token.column))
+                            _ => return Err(SyntaxError::Expected { expected_token: "number".to_string(), found: token })?
                         }
                     }
-                    wrong_token => return Err(format!("Syntax Error: expected a number found {wrong_token:?} at {}{}", token.line, token.column))
+                    _ => return Err(SyntaxError::Expected { expected_token: "number".to_string(), found: token })?
                 }
             }
             Word(Pop) => {
@@ -293,7 +340,7 @@ fn run_func(tokens: &mut TokenIter, state: &mut MachineState, func_index: usize)
                 match &token.token_type {
                     Word(Mem) => {
                         if let Some(value) = state.stack.pop() {
-                            state.memory.insert(&value.to_bytes());
+                            state.memory.insert(&value.to_bytes())?
                         }
                     }
                     _ => todo!("add ability to pop into variables")
@@ -307,32 +354,32 @@ fn run_func(tokens: &mut TokenIter, state: &mut MachineState, func_index: usize)
             }
             Word(Jmp) => {
                 token = tokens.next();
-                if let StringLit(ident) = token.token_type {
-                    if let Some(index) = labels.get(&ident) {
+                if let StringLit(ref ident) = token.token_type {
+                    if let Some(index) = labels.get(ident) {
                         let value = state.stack.pop().unwrap();
                         if !value.is_zero() {
                             tokens.index = *index
                         }
                     } else {
-                        return Err(format!("Error: label {ident} does not exist yet is reffered to at {}:{}", token.line, token.column))
+                        return Err(SyntaxError::Expected { expected_token: "string_lit".to_string(), found: token })?
                     }
                 } else {
-                    return Err(format!("Error expected string lit found {:?} at {}:{}", token.token_type, token.line, token.column))
+                    return Err(SyntaxError::Expected { expected_token: "string_lit".to_string(), found: token })?
                 }
             }
             Word(Jpz) => {
                 token = tokens.next();
-                if let StringLit(ident) = token.token_type {
-                    if let Some(index) = labels.get(&ident) {
+                if let StringLit(ref ident) = token.token_type {
+                    if let Some(index) = labels.get(ident) {
                         let value = state.stack.pop().unwrap();
                         if value.is_zero() {
                             tokens.index = *index
                         }
                     } else {
-                        return Err(format!("Error: label {ident} does not exist yet is reffered to at {}:{}", token.line, token.column))
+                        return Err(SemanticError::UndefindLabel { ident: token })?
                     }
                 } else {
-                    return Err(format!("Error expected string lit found {:?} at {}:{}", token.token_type, token.line, token.column))
+                    return Err(SyntaxError::Expected { expected_token: "string_lit".to_string(), found: token })?
                 }
             }
             Word(I128) => {
@@ -378,7 +425,7 @@ fn run_func(tokens: &mut TokenIter, state: &mut MachineState, func_index: usize)
                                 StackValue::I32(val) => val as i32,
                                 StackValue::I16(val) => val as i32,
                                 StackValue::I8(val) => val as i32,
-                                StackValue::Null => return Err(format!("Error: tried casting to null at {}:{}", token.line, token.column))
+                                StackValue::Null => return Err(RuntimeError::CastFromNull { token: token })?
                             }));
                         }
                     },
@@ -392,7 +439,7 @@ fn run_func(tokens: &mut TokenIter, state: &mut MachineState, func_index: usize)
                                 StackValue::I32(val) => val as i64,
                                 StackValue::I16(val) => val as i64,
                                 StackValue::I8(val) => val as i64,
-                                StackValue::Null => return Err(format!("Error: tried casting to null at {}:{}", token.line, token.column))
+                                StackValue::Null => return Err(RuntimeError::CastFromNull { token: token })?
                             }));
                         }
                     },
@@ -406,7 +453,7 @@ fn run_func(tokens: &mut TokenIter, state: &mut MachineState, func_index: usize)
                                 StackValue::I32(val) => val as i128,
                                 StackValue::I16(val) => val as i128,
                                 StackValue::I8(val) => val as i128,
-                                StackValue::Null => return Err(format!("Error: tried casting to null at {}:{}", token.line, token.column))
+                                StackValue::Null => return Err(RuntimeError::CastFromNull { token: token })?
                             }));
                         }
                     },
@@ -420,7 +467,7 @@ fn run_func(tokens: &mut TokenIter, state: &mut MachineState, func_index: usize)
                                 StackValue::I32(val) => val as i16,
                                 StackValue::I16(val) => val as i16,
                                 StackValue::I8(val) => val as i16,
-                                StackValue::Null => return Err(format!("Error: tried casting to null at {}:{}", token.line, token.column))
+                                StackValue::Null => return Err(RuntimeError::CastFromNull { token: token })?
                             }));
                         }
                     },
@@ -434,7 +481,7 @@ fn run_func(tokens: &mut TokenIter, state: &mut MachineState, func_index: usize)
                                 StackValue::I32(val) => val as i8,
                                 StackValue::I16(val) => val as i8,
                                 StackValue::I8(val) => val as i8,
-                                StackValue::Null => return Err(format!("Error: tried casting to null at {}:{}", token.line, token.column))
+                                StackValue::Null => return Err(RuntimeError::CastFromNull { token: token })?
                             }));
                         }
                     },
@@ -448,7 +495,7 @@ fn run_func(tokens: &mut TokenIter, state: &mut MachineState, func_index: usize)
                                 StackValue::I32(val) => val as f32,
                                 StackValue::I16(val) => val as f32,
                                 StackValue::I8(val) => val as f32,
-                                StackValue::Null => return Err(format!("Error: tried casting to null at {}:{}", token.line, token.column))
+                                StackValue::Null => return Err(RuntimeError::CastFromNull { token: token })?
                             }));
                         }
                     },
@@ -462,14 +509,14 @@ fn run_func(tokens: &mut TokenIter, state: &mut MachineState, func_index: usize)
                                 StackValue::I32(val) => val as f64,
                                 StackValue::I16(val) => val as f64,
                                 StackValue::I8(val) => val as f64,
-                                StackValue::Null => return Err(format!("Error: tried casting to null at {}:{}", token.line, token.column))
+                                StackValue::Null => return Err(RuntimeError::CastFromNull { token: token })?
                             }));
                         }
                     },
-                    wrong_token=>return  Err(format!("Error: expected type found {wrong_token:?} at {}:{}", token.line, token.column))
+                    _ =>return  Err(SyntaxError::Expected { expected_token: "type".to_string(), found: token })?
                 }
             }
-            wrong_token => return Err(format!("Syntax Error: Did not expect {wrong_token:?} at {}:{}", token.line, token.column))
+            _ => return Err(SyntaxError::Expected { expected_token: "function instruction".to_string(), found: token })?
         }
     }
     if state.function_stack.len() >= 1 {
@@ -481,6 +528,7 @@ fn run_func(tokens: &mut TokenIter, state: &mut MachineState, func_index: usize)
     Ok(())
 }
 
+#[derive(Debug)]
 enum NumericType {
     I128,
     I64,
@@ -492,7 +540,7 @@ enum NumericType {
 
 }
 
-fn run_variable_decleration(tokens: &mut TokenIter, state: &mut MachineState) -> Result<(), String> {
+fn run_variable_decleration(tokens: &mut TokenIter, state: &mut MachineState) -> Result<(), Error> {
     while match tokens.peek().token_type {
         VarIdent(_) => true,
         _ => false
@@ -501,13 +549,13 @@ fn run_variable_decleration(tokens: &mut TokenIter, state: &mut MachineState) ->
         if let VarIdent(ident) = token.token_type {
             state.variables.insert(ident.clone(), StackValue::Null);
         } else {
-            return Err(format!("Syntax Error: expected varibale ident found {:?} at {}{}", token.token_type, token.line, token.column));
+            return Err(SyntaxError::Expected { expected_token: "variable ident".to_string(), found: token })?
         }
     }
     Ok(())
 }
 
-fn run_variable_set(tokens: &mut TokenIter, state: &mut MachineState) -> Result<(), String> {
+fn run_variable_set(tokens: &mut TokenIter, state: &mut MachineState) -> Result<(), Error> {
     let token = tokens.next(); 
     match &token.token_type {
         VarIdent(ident) => {
@@ -516,17 +564,17 @@ fn run_variable_set(tokens: &mut TokenIter, state: &mut MachineState) -> Result<
                     *var = value;
                     Ok(())
                 } else {
-                    Err(format!("Error: Variable {ident} has not been declared found at {}:{}", token.line, token.column))
+                    Err(SemanticError::UndefinedVar { ident: token })?
                 }
             } else {
-                Err(format!("Error: tried popping from an empty stack while setting variable {ident} at {}:{}", token.line, token.column))
+                Err(RuntimeError::PoppingEmptyStack { popped_into: token })?
             }
         }
-        wrong_token => Err(format!("Syntax Error: Expected variable ident found {:?} at {}:{}",wrong_token,  token.line, token.column))
+        _ => Err(SyntaxError::Expected { expected_token: "variable".to_string(), found: token })?
     }
 }
 
-fn run_variable_get(tokens: &mut TokenIter, state: &mut MachineState) -> Result<(), String> {
+fn run_variable_get(tokens: &mut TokenIter, state: &mut MachineState) -> Result<(), Error> {
     let token = tokens.next();
     match &token.token_type {
         VarIdent(ident) => {
@@ -534,14 +582,14 @@ fn run_variable_get(tokens: &mut TokenIter, state: &mut MachineState) -> Result<
                 state.stack.push(*var);
                 Ok(())
             } else {
-                return Err(format!("Error: Variable {ident} has not been declared found at {}:{}", token.line, token.column))
+                return Err(SemanticError::UndefinedVar { ident: token })?
             }
         }
-        wrong_token => return Err(format!("Syntax Error: Expected variable ident found {:?} at {}:{}",wrong_token,  token.line, token.column))
+        _ => return Err(SemanticError::UndefinedVar { ident: token })?
     }
 }
 
-fn run_numeric_instruction(tokens: &mut TokenIter, state: &mut MachineState, num_type: NumericType) -> Result<(), String> {
+fn run_numeric_instruction(tokens: &mut TokenIter, state: &mut MachineState, num_type: NumericType) -> Result<(), Error> {
     let mut token = tokens.next();
     match token.token_type {
         Word(Push) => {
@@ -557,7 +605,7 @@ fn run_numeric_instruction(tokens: &mut TokenIter, state: &mut MachineState, num
                         NumericType::F32 => {
                             token = tokens.next();
                             if token.token_type != FullStop {
-                                return Err(format!("Syntax Error: Expected full stop for float found {:?} at {}:{}",token.token_type,  token.line, token.column))
+                                return Err(SyntaxError::Expected { expected_token: "full stop for float".to_string(), found: token })?
                             }
                             token = tokens.next();
                             match token.token_type {
@@ -565,13 +613,13 @@ fn run_numeric_instruction(tokens: &mut TokenIter, state: &mut MachineState, num
                                     let float: f32 = format!("{num}.{num_after_decimal}").parse().unwrap();
                                     state.stack.push(StackValue::F32(float))
                                 } 
-                                wrong_token => return Err(format!("Syntax Error: Expected number found {wrong_token:?} at {}:{}", token.line, token.column))
+                                _ => return Err(SyntaxError::Expected { expected_token: "number".to_string(), found: token })?
                             }
                         },
                         NumericType::F64 => {
                             token = tokens.next();
                             if token.token_type != FullStop {
-                                return Err(format!("Syntax Error: Expected full stop for float found {:?} at {}:{}",token.token_type,  token.line, token.column))
+                                return Err(SyntaxError::Expected { expected_token: "full stop for float".to_string(), found: token })?
                             }
                             token = tokens.next();
                             match token.token_type {
@@ -579,12 +627,13 @@ fn run_numeric_instruction(tokens: &mut TokenIter, state: &mut MachineState, num
                                     let float: f64 = format!("{num}.{num_after_decimal}").parse().unwrap();
                                     state.stack.push(StackValue::F64(float))
                                 }
-                                wrong_token => return Err(format!("Syntax Error: Expected number found {wrong_token:?} at {}:{}", token.line, token.column))
+                                _ => return Err(SyntaxError::Expected { expected_token: "number".to_string(), found: token })?
                             }
                         },
                     }
                 }
-                wrong_token => return Err(format!("Syntax Error: Expected number found {wrong_token:?} at {}:{}", token.line, token.column))
+                _ => return Err(SyntaxError::Expected { expected_token: "number".to_string(), found: token })?
+
             }
             while match tokens.peek().token_type {
                 Number(_) => true,
@@ -602,7 +651,7 @@ fn run_numeric_instruction(tokens: &mut TokenIter, state: &mut MachineState, num
                             NumericType::F32 => {
                                 token = tokens.next();
                                 if token.token_type != FullStop {
-                                    return Err(format!("Syntax Error: Expected full stop for float found {:?} at {}:{}",token.token_type,  token.line, token.column))
+                                    return Err(SyntaxError::Expected { expected_token: "full stop for float".to_string(), found: token })?
                                 }
                                 token = tokens.next();
                                 match token.token_type {
@@ -610,13 +659,13 @@ fn run_numeric_instruction(tokens: &mut TokenIter, state: &mut MachineState, num
                                         let float: f32 = format!("{num}.{num_after_decimal}").parse().unwrap();
                                         state.stack.push(StackValue::F32(float))
                                     } 
-                                    wrong_token => return Err(format!("Syntax Error: Expected number found {wrong_token:?} at {}:{}", token.line, token.column))
+                                    _ => return Err(SyntaxError::Expected { expected_token: "number".to_string(), found: token })?
                                 }
                             },
                             NumericType::F64 => {
                                 token = tokens.next();
                                 if token.token_type != FullStop {
-                                    return Err(format!("Syntax Error: Expected full stop for float found {:?} at {}:{}",token.token_type,  token.line, token.column))
+                                    return Err(SyntaxError::Expected { expected_token: "full stop for float".to_string(), found: token })?
                                 }
                                 token = tokens.next();
                                 match token.token_type {
@@ -624,12 +673,12 @@ fn run_numeric_instruction(tokens: &mut TokenIter, state: &mut MachineState, num
                                         let float: f64 = format!("{num}.{num_after_decimal}").parse().unwrap();
                                         state.stack.push(StackValue::F64(float))
                                     }
-                                    wrong_token => return Err(format!("Syntax Error: Expected number found {wrong_token:?} at {}:{}", token.line, token.column))
+                                    _ => return Err(SyntaxError::Expected { expected_token: "number".to_string(), found: token })?
                                 }
                             },
                         }
                     }
-                    _ => return Err(format!("This should be unreachable"))
+                    _ => panic!("This should be unreachable")
                 }
             }
             Ok(())
@@ -650,36 +699,36 @@ fn run_numeric_instruction(tokens: &mut TokenIter, state: &mut MachineState, num
         Word(Lt) => process_numerical_op(state, num_type, NumericeOp::Lt),
         Word(Max) => process_numerical_op(state, num_type, NumericeOp::Max),
         Word(Min) => process_numerical_op(state, num_type, NumericeOp::Min),
-        wrong_token => Err(format!("Syntax Error: Did not expect {wrong_token:?} at {}:{} expected numeric intruction", token.line, token.column))
+        _ => Err(SyntaxError::Expected { expected_token: "numeric operation".to_string(), found: token })?
     }
 }
 
-fn run_call(tokens: &mut TokenIter, state: &mut MachineState) -> Result<(), String> {
+fn run_call(tokens: &mut TokenIter, state: &mut MachineState) -> Result<(), Error> {
     let token = tokens.next();
     let call_site_index = tokens.index;
     match token.token_type {
-        FuncIdent(ident) => {
-            if let Some(func_index) = state.functions.get(&ident) {
+        FuncIdent(ref ident) => {
+            if let Some(func_index) = state.functions.get(ident) {
                 tokens.index = call_site_index;
                 state.function_stack.push(call_site_index);
-                if ident == "printmemory".to_string() {
+                if *ident == "printmemory".to_string() {
                     print_memory(state);
                     Ok(())
                 } else {
                     run_func(tokens, state, *func_index)
                 }
             } else {
-                return Err(format!("Error: tried calling undefined func {ident} at {}:{}", token.line, token.column))
+                return Err(SemanticError::UndefinedFunc { ident: token })?
             }
         }
-        wrong_token => return Err(format!("Syntax Error: Expected function ident found {wrong_token:?} at {}:{}", token.line, token.column))
+        _ => return Err(SyntaxError::Expected { expected_token: "function ident".to_string(), found: token })?
     }
 }
 fn print_memory(state: &mut MachineState) {
     println!("Memory: {:?}", state.memory)
 }
 
-fn find_funcs(tokens: &mut TokenIter, state: &mut MachineState) -> Result<(), String> {
+fn find_funcs(tokens: &mut TokenIter, state: &mut MachineState) -> Result<(), Error> {
     let mut token = tokens.current();
     match token.token_type {
         Word(Func) => {
@@ -691,7 +740,9 @@ fn find_funcs(tokens: &mut TokenIter, state: &mut MachineState) -> Result<(), St
                 FuncIdent(ident) => {
                     func_ident = ident
                 }
-                wrong_token => return Err(format!("Syntax Error: Expected function ident found {wrong_token:?} at {}:{}", token.line, token.column))
+                // wrong_token => return Err(format!("Syntax Error: Expected function ident found {wrong_token:?} at {}:{}", token.line, token.column))
+                _ => return Err(Error::SyntacError(SyntaxError::Expected { expected_token: "function ident".to_string(), found: token }))
+
             }
             token = tokens.next();
             match token.token_type {
@@ -700,11 +751,12 @@ fn find_funcs(tokens: &mut TokenIter, state: &mut MachineState) -> Result<(), St
                     token = tokens.next();
                     match token.token_type {
                         Colon => func_index = tokens.index,
-                        wrong_token => return Err(format!("Syntax Error: Expected colon or export found {wrong_token:?} at {}:{}", token.line, token.column))
+                        _ => return Err(SyntaxError::Expected { expected_token: "collon or export".to_string(), found: token })?
                     }
                 },
                 Colon => func_index = tokens.index,
-                wrong_token => return Err(format!("Syntax Error: Expected colon or export found {wrong_token:?} at {}:{}", token.line, token.column))
+                _ => return Err(SyntaxError::Expected { expected_token: "collon or export".to_string(), found: token })?
+
             }
             state.functions.insert(func_ident.clone(), func_index);
             if let Some(export) = func_export {
@@ -780,12 +832,15 @@ macro_rules! perform_operation {
             NumericeOp::Lt => ($lhs < $rhs) as i32 as $type,
             NumericeOp::Max => $lhs.max($rhs),
             NumericeOp::Min => $lhs.min($rhs),
-            operation => return Err(format!("operation {operation:?} can not be used on a float"))
+            operation => return Err(SemanticError::IncorrectOperation{
+                operation: operation,
+                val_type: "float".to_string()
+            })?
         }
     };
 }
 
-fn process_numerical_op(state: &mut MachineState, node_type: NumericType, operation: NumericeOp) -> Result<(), String> {
+fn process_numerical_op(state: &mut MachineState, node_type: NumericType, operation: NumericeOp) -> Result<(), Error> {
     let rhs = state
         .stack
         .pop()
@@ -803,7 +858,7 @@ fn process_numerical_op(state: &mut MachineState, node_type: NumericType, operat
                     operation, rhs_val, lhs_val
                 )))
             } else {
-                return Err(format!("tried applying operation but rhs was {rhs:?} and lhs was {lhs:?}"))
+                return Err(RuntimeError::MismatchLhsRhs { lhs: lhs, rhs: rhs })?
             }
         }
         NumericType::I64 => {
@@ -813,7 +868,7 @@ fn process_numerical_op(state: &mut MachineState, node_type: NumericType, operat
                     operation, rhs_val, lhs_val
                 )))
             } else {
-                return Err(format!("tried applying operation but rhs was {rhs:?} and lhs was {lhs:?}"))
+                return Err(RuntimeError::MismatchLhsRhs { lhs: lhs, rhs: rhs })?
             }
         }
         NumericType::I16 => {
@@ -823,7 +878,7 @@ fn process_numerical_op(state: &mut MachineState, node_type: NumericType, operat
                     operation, rhs_val, lhs_val
                 )))
             } else {
-                return Err(format!("tried applying operation but rhs was {rhs:?} and lhs was {lhs:?}"))
+                return Err(RuntimeError::MismatchLhsRhs { lhs: lhs, rhs: rhs })?
             }
         }
         NumericType::I8 => {
@@ -833,7 +888,7 @@ fn process_numerical_op(state: &mut MachineState, node_type: NumericType, operat
                     operation, rhs_val, lhs_val
                 )))
             } else {
-                return Err(format!("tried applying operation but rhs was {rhs:?} and lhs was {lhs:?}"))
+                return Err(RuntimeError::MismatchLhsRhs { lhs: lhs, rhs: rhs })?
             }
         }
         NumericType::F32 => {
@@ -843,7 +898,7 @@ fn process_numerical_op(state: &mut MachineState, node_type: NumericType, operat
                     operation, rhs_val, lhs_val
                 )))
             } else {
-                return Err(format!("tried applying operation but rhs was {rhs:?} and lhs was {lhs:?}"))
+                return Err(RuntimeError::MismatchLhsRhs { lhs: lhs, rhs: rhs })?
             }
         }
         NumericType::F64 => {
@@ -853,7 +908,7 @@ fn process_numerical_op(state: &mut MachineState, node_type: NumericType, operat
                     operation, rhs_val, lhs_val
                 )))
             } else {
-                return Err(format!("tried applying operation but rhs was {rhs:?} and lhs was {lhs:?}"))
+                return Err(RuntimeError::MismatchLhsRhs { lhs: lhs, rhs: rhs })?
             }
         }
         NumericType::I128 => {
@@ -863,7 +918,7 @@ fn process_numerical_op(state: &mut MachineState, node_type: NumericType, operat
                     operation, rhs_val, lhs_val
                 )))
             } else {
-                return Err(format!("tried applying operation but rhs was {rhs:?} and lhs was {lhs:?}"))
+                return Err(RuntimeError::MismatchLhsRhs { lhs: lhs, rhs: rhs })?
             }
         }
     }

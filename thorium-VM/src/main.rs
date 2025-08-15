@@ -2,7 +2,7 @@
 use std::{env, fs};
 
 // use crate::parser::parse_tokens;
-use crate::run_byte_code::run;
+use crate::run_byte_code::{run, MemoryErrors, RuntimeError, SemanticError, SyntaxError};
 // use crate::runner::State;
 use crate::tokenizer::tokenize;
 
@@ -13,7 +13,37 @@ mod tokenizer;
 mod tests;
 mod run_byte_code;
 
-fn main() -> Result<(), String>{
+#[derive(Debug)]
+enum Error {
+    MemoryError(MemoryErrors), 
+    SyntacError(SyntaxError),
+    SemanticError(SemanticError),
+    RuntimeError(RuntimeError),
+}
+
+impl From<SyntaxError> for Error {
+    fn from(value: SyntaxError) -> Self {
+        Self::SyntacError(value)
+    }
+}
+impl From<MemoryErrors> for Error {
+    fn from(value: MemoryErrors) -> Self {
+        Self::MemoryError(value)
+    }
+}
+impl From<SemanticError> for Error {
+    fn from(value: SemanticError) -> Self {
+        Self::SemanticError(value)
+    }
+}
+impl From<RuntimeError> for Error {
+    fn from(value: RuntimeError) -> Self {
+        Self::RuntimeError(value)
+    }
+}
+
+
+fn main() -> Result<(), Error>{
     let command_line_args: Vec<String> = env::args().collect();
 
     let file_name = &command_line_args[1];
