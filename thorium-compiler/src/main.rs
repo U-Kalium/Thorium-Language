@@ -2,8 +2,8 @@ use std::{env, fs, process::Command};
 
 use crate::{parser::parse, tokenizer::tokanize};
 
-mod tokenizer;
 mod parser;
+mod tokenizer;
 // mod wasm_compile;
 
 fn main() {
@@ -11,8 +11,8 @@ fn main() {
     let file_name = command_line_args[1].clone();
     // let file_name = "examples/variables.th".to_string();
 
-    let file_content = fs::read_to_string(file_name.clone())
-        .expect("Should have been able to read the file");
+    let file_content =
+        fs::read_to_string(file_name.clone()).expect("Should have been able to read the file");
 
     let tokens = tokanize(file_content);
 
@@ -25,8 +25,7 @@ fn main() {
     // let wat_content = gen_wasm(syntax_tree);
 
     fs::write(byte_code_filename, byte_code).unwrap();
-    
-    
+
     // Command::new("wasmtime")
     //         .arg("test.wat")
     //         .spawn().unwrap();
