@@ -80,6 +80,11 @@ impl Page {
         }
         Err(MemoryErrors::PageFull)
     }
+    fn copy(&mut self, pointer: usize, size: usize) -> &[u8] {
+        let data = &self.data[pointer..pointer+size];
+        data
+    }
+
     fn remove(&mut self, pointer: usize, size: usize) {
         self.free_data_map.push((size, pointer));
     }
@@ -116,6 +121,15 @@ impl Memory {
     fn grow(&mut self, page_amount: usize) {
         let mut new_pages = vec![Page::new(); page_amount];
         self.pages.append(&mut new_pages);
+    }
+
+    fn copy(&mut self, pointer: usize, size: usize) -> &[u8] {
+        let amount_of_pages = 1 + size / PAGE_SIZE;
+        let page_index = (pointer + 1) / PAGE_SIZE;
+        let in_page_pointer = PAGE_SIZE % (pointer + 1);
+
+        let data = self.pages[page_index].copy(in_page_pointer, size);
+        data
     }
 
     fn remove(&mut self, pointer: usize, size: usize) {
@@ -867,6 +881,52 @@ fn run_numeric_instruction(
         Word(Lt) => process_numerical_op(state, num_type, NumericeOp::Lt),
         Word(Max) => process_numerical_op(state, num_type, NumericeOp::Max),
         Word(Min) => process_numerical_op(state, num_type, NumericeOp::Min),
+        Word(Cpy) => {
+            token = tokens.next();
+            let pointer: usize;
+            if let Number(num) = token.token_type {
+                pointer = num.parse().unwrap()
+            } else {
+                return Err(SyntaxError::Expected { expected_token: "number".to_string(), found: token })?;
+            }
+            match num_type {
+                NumericType::I128 => {
+                    let bytes = state.memory.copy(pointer, size_of::<i128>());
+                    state.stack.push(StackValue::I128(i128::from_be_bytes(bytes.try_into().unwrap())));
+                    Ok(())
+                },
+                NumericType::I64 => {
+                    let bytes = state.memory.copy(pointer, size_of::<i64>());
+                    state.stack.push(StackValue::I64(i64::from_be_bytes(bytes.try_into().unwrap())));
+                    Ok(())
+                },
+                NumericType::I32 => {
+                    let bytes = state.memory.copy(pointer, size_of::<i32>());
+                    state.stack.push(StackValue::I32(i32::from_be_bytes(bytes.try_into().unwrap())));
+                    Ok(())
+                },
+                NumericType::I16 => {
+                    let bytes = state.memory.copy(pointer, size_of::<i16>());
+                    state.stack.push(StackValue::I16(i16::from_be_bytes(bytes.try_into().unwrap())));
+                    Ok(())
+                },
+                NumericType::I8 => {
+                    let bytes = state.memory.copy(pointer, size_of::<i8>());
+                    state.stack.push(StackValue::I8(i8::from_be_bytes(bytes.try_into().unwrap())));
+                    Ok(())
+                },
+                NumericType::F32 => {
+                    let bytes = state.memory.copy(pointer, size_of::<f32>());
+                    state.stack.push(StackValue::F32(f32::from_be_bytes(bytes.try_into().unwrap())));
+                    Ok(())
+                },
+                NumericType::F64 => {
+                    let bytes = state.memory.copy(pointer, size_of::<f64>());
+                    state.stack.push(StackValue::F64(f64::from_be_bytes(bytes.try_into().unwrap())));
+                    Ok(())
+                },
+            }
+        }
         _ => Err(SyntaxError::Expected {
             expected_token: "numeric operation".to_string(),
             found: token,
