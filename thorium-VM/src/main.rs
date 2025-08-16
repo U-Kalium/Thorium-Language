@@ -2,7 +2,7 @@
 use std::{env, fs};
 
 // use crate::parser::parse_tokens;
-use crate::run_byte_code::{run, MemoryErrors, RuntimeError, SemanticError, SyntaxError};
+use crate::run_byte_code::{run, MemoryErrors, RuntimeError, SemanticError, StackValue, SyntaxError};
 // use crate::runner::State;
 use crate::tokenizer::tokenize;
 
@@ -10,11 +10,12 @@ use crate::tokenizer::tokenize;
 // mod runner;
 // mod syntax_tree;
 mod tokenizer;
+#[cfg(test)]
 mod tests;
 mod run_byte_code;
 
 #[derive(Debug)]
-enum Error {
+pub enum Error {
     MemoryError(MemoryErrors), 
     SyntacError(SyntaxError),
     SemanticError(SemanticError),
@@ -58,7 +59,10 @@ fn main() -> Result<(), Error>{
 
     let tokens = tokenize(file_content).unwrap();
 
-    run(&tokens)
+    match run(&tokens) {
+        Ok(_) => Ok(()),
+        Err(err) => Err(err),
+    }
     // println!("tokens: \n {:?}", tokens);
     // let syntax_tree = parse_tokens(&tokens);
     // // println!("tree: \n {:?}", syntax_tree);
@@ -66,4 +70,9 @@ fn main() -> Result<(), Error>{
     // let mut state = State::new(syntax_tree);
 
     // println!("returned: {:?}", state.run())
+}
+
+pub fn tokenize_and_run(byte_code: String) -> Result<Vec<StackValue>, Error> {
+    let tokens = tokenize(byte_code).unwrap();
+    run(&tokens)
 }

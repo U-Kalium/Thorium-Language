@@ -56,13 +56,13 @@ pub enum RuntimeError {
 
 #[derive(Debug, Clone)]
 struct Page {
-    data: [u8; PAGE_SIZE],
+    data: Box<[u8; PAGE_SIZE]>,
     free_data_map: Vec<(usize, usize)>, // size and pointer
 }
 impl Page {
     fn new() -> Self {
         let free_data_map = vec![(PAGE_SIZE, 0)];
-        let data = [0; PAGE_SIZE];
+        let data = Box::new([0; PAGE_SIZE]);
         Self {
             data,
             free_data_map,
@@ -93,8 +93,9 @@ struct Memory {
 
 impl Memory {
     fn new(number_of_pages: usize) -> Self {
+        let pages = vec![Page::new(); number_of_pages]; 
         Self {
-            pages: vec![Page::new(); number_of_pages],
+            pages,
         }
     }
     fn insert(&mut self, data: &[u8]) -> Result<(), MemoryErrors> {
@@ -145,8 +146,8 @@ impl Memory {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-enum StackValue {
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum StackValue {
     I128(i128),
     I64(i64),
     I32(i32),
@@ -241,7 +242,7 @@ impl TokenIter {
     }
 }
 
-pub fn run(tokens: &Vec<Token>) -> Result<(), Error> {
+pub fn run(tokens: &Vec<Token>) -> Result<Vec<StackValue>, Error> {
     let mut state = MachineState::new();
     let mut token_iter = TokenIter {
         tokens: tokens.clone(),
@@ -253,7 +254,8 @@ pub fn run(tokens: &Vec<Token>) -> Result<(), Error> {
     println!("funcs: {:?}", state.functions);
     println!("exported funcs: {:?}", state.exports);
     let start_func_index = state.exports.get("_start").unwrap().clone();
-    run_func(&mut token_iter, &mut state, start_func_index)
+    run_func(&mut token_iter, &mut state, start_func_index)?;
+    Ok(state.stack)
 }
 
 fn run_func(
