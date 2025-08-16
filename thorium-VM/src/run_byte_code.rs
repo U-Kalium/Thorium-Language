@@ -51,6 +51,7 @@ pub enum RuntimeError {
     CastFromNull { token: Token },
     MismatchLhsRhs { lhs: StackValue, rhs: StackValue },
     PoppingEmptyStack { popped_into: Token },
+    NoValueFoundAtStackIndex { index: usize, token: Token },
 }
 
 #[derive(Debug, Clone)]
@@ -84,16 +85,6 @@ impl Page {
     }
 }
 
-// impl Display for Page {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         let mut data = Vec::new();
-//         for (size, pointer) in &self.free_data_map {
-//             data.push((pointer, &self.data[*pointer as usize ..(pointer+size) as usize]))
-//         }
-//         write!(f, "Page:{:?}", data)
-//     }
-// }
-
 #[derive(Debug)]
 struct Memory {
     pages: Vec<Page>,
@@ -104,7 +95,6 @@ impl Memory {
     fn new(number_of_pages: usize) -> Self {
         Self {
             pages: vec![Page::new(); number_of_pages],
-            // capacity_of_pages: vec![vec![(PAGE_SIZE, 0)]; number_of_pages]
         }
     }
     fn insert(&mut self, data: &[u8]) -> Result<(), MemoryErrors> {
@@ -300,26 +290,25 @@ fn run_func(
                         let float64: f64;
                         if let Ok(int) = num.parse() {
                             int8 = int;
-                            state.memory.insert(&int8.to_be_bytes());
+                            state.memory.insert(&int8.to_be_bytes())?;
                         } else if let Ok(int) = num.parse() {
                             int16 = int;
-                            state.memory.insert(&int16.to_be_bytes());
+                            state.memory.insert(&int16.to_be_bytes())?;
                         } else if let Ok(int) = num.parse() {
                             int32 = int;
-                            state.memory.insert(&int32.to_be_bytes());
+                            state.memory.insert(&int32.to_be_bytes())?;
                         } else if let Ok(int) = num.parse() {
                             int64 = int;
-                            state.memory.insert(&int64.to_be_bytes());
+                            state.memory.insert(&int64.to_be_bytes())?;
                         } else if let Ok(float) = num.parse() {
                             float32 = float;
-                            state.memory.insert(&float32.to_be_bytes());
+                            state.memory.insert(&float32.to_be_bytes())?;
                         } else if let Ok(float) = num.parse() {
                             float64 = float;
-                            state.memory.insert(&float64.to_be_bytes());
+                            state.memory.insert(&float64.to_be_bytes())?;
                         } else {
                             panic!("somehow the tokenizer had an invalid number type")
                         }
-                        
                     }
                     CharLit(char) => {
                         let mut chars = String::from(*char);
@@ -352,7 +341,10 @@ fn run_func(
                         if let Ok(integer) = number.parse::<usize>() {
                             state.memory.grow(integer);
                         } else {
-                            return Err(SyntaxError::Expected { expected_token: "integer".to_string(), found: token })?
+                            return Err(SyntaxError::Expected {
+                                expected_token: "integer".to_string(),
+                                found: token,
+                            })?;
                         }
                     }
                     _ => {
@@ -375,12 +367,18 @@ fn run_func(
                                 if let Ok(integer) = pointer.parse::<usize>() {
                                     parsed_pointer = integer;
                                 } else {
-                                    return Err(SyntaxError::Expected { expected_token: "integer".to_string(), found: token })?
+                                    return Err(SyntaxError::Expected {
+                                        expected_token: "integer".to_string(),
+                                        found: token,
+                                    })?;
                                 }
                                 if let Ok(integer) = size.parse::<usize>() {
                                     parsed_size = integer;
                                 } else {
-                                    return Err(SyntaxError::Expected { expected_token: "integer".to_string(), found: token })?
+                                    return Err(SyntaxError::Expected {
+                                        expected_token: "integer".to_string(),
+                                        found: token,
+                                    })?;
                                 }
                                 state.memory.remove(parsed_pointer, parsed_size);
                             }
@@ -466,7 +464,48 @@ fn run_func(
             Word(Get) => run_variable_get(tokens, state)?,
             Word(Cpy) => {
                 token = tokens.next();
-                // if let Number(num) => 
+                let pointer: usize;
+                if let Number(num) = token.token_type {
+                    pointer = num.parse().unwrap();
+                } else {
+                    return Err(SyntaxError::Expected {
+                        expected_token: "number for pointer".to_string(),
+                        found: token,
+                    })?;
+                }
+                token = tokens.next();
+                match &token.token_type {
+                    Word(Mem) => {
+                        if let Some(value) = state.stack.get(pointer) {
+                            state.memory.insert(&value.to_bytes())?
+                        } else {
+                            return Err(RuntimeError::NoValueFoundAtStackIndex {
+                                index: pointer,
+                                token: token,
+                            })?;
+                        }
+                    }
+                    VarIdent(ident) => {
+                        if let Some(stack_value) = state.stack.get(pointer) {
+                            if let Some(var_value) = state.variables.get_mut(ident) {
+                                *var_value = *stack_value
+                            } else {
+                                return Err(SemanticError::UndefinedVar { ident: token })?;
+                            }
+                        } else {
+                            return Err(RuntimeError::NoValueFoundAtStackIndex {
+                                index: pointer,
+                                token: token,
+                            })?;
+                        }
+                    }
+                    _ => {
+                        return Err(SyntaxError::Expected {
+                            expected_token: "mem or var ident".to_string(),
+                            found: token,
+                        })?;
+                    }
+                }
             }
             Word(Cast) => {
                 token = tokens.next();
@@ -689,7 +728,7 @@ fn run_numeric_instruction(
                     NumericType::I64 => state.stack.push(StackValue::I64(num.parse().unwrap())),
                     NumericType::I32 => state.stack.push(StackValue::I32(num.parse().unwrap())),
                     NumericType::I16 => state.stack.push(StackValue::I16(num.parse().unwrap())),
-                    NumericType::I8 => state.stack.push(StackValue::I8(num.parse().unwrap() )),
+                    NumericType::I8 => state.stack.push(StackValue::I8(num.parse().unwrap())),
                     NumericType::F32 => {
                         token = tokens.next();
                         if token.token_type != FullStop {
@@ -751,11 +790,13 @@ fn run_numeric_instruction(
                 token = tokens.next();
                 match token.token_type {
                     Number(num) => match num_type {
-                        NumericType::I128 => state.stack.push(StackValue::I128(num.parse().unwrap())),
+                        NumericType::I128 => {
+                            state.stack.push(StackValue::I128(num.parse().unwrap()))
+                        }
                         NumericType::I64 => state.stack.push(StackValue::I64(num.parse().unwrap())),
                         NumericType::I32 => state.stack.push(StackValue::I32(num.parse().unwrap())),
                         NumericType::I16 => state.stack.push(StackValue::I16(num.parse().unwrap())),
-                        NumericType::I8 => state.stack.push(StackValue::I8(num.parse().unwrap() )),
+                        NumericType::I8 => state.stack.push(StackValue::I8(num.parse().unwrap())),
                         NumericType::F32 => {
                             token = tokens.next();
                             if token.token_type != FullStop {
