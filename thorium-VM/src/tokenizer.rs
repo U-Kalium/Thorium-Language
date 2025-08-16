@@ -14,7 +14,7 @@ pub enum TokenType {
     LabelIdent(String),
     Colon,
     FullStop,
-    Number(i128),
+    Number(String),
     StringLit(String),
     CharLit(char),
     EOF,
@@ -65,7 +65,8 @@ pub enum WordToken {
     Insert,
     Grow,
     Remove,
-    Mem
+    Mem,
+    Cpy,
 }
 
 pub fn tokenize(content: String) -> Result<Vec<Token>, String> {

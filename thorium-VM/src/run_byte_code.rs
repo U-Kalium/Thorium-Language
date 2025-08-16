@@ -289,7 +289,38 @@ fn run_func(
                 token = tokens.next();
                 match &token.token_type {
                     StringLit(string) => state.memory.insert(string.as_bytes())?,
-                    Number(number) => state.memory.insert(&number.to_be_bytes())?,
+                    // Number(number) => state.memory.insert(&number.parse().unwrap().to_be_bytes())?,
+                    Number(num) => {
+                        // num.
+                        let int8: i8;
+                        let int16: i16;
+                        let int32: i32;
+                        let int64: i64;
+                        let float32: f32;
+                        let float64: f64;
+                        if let Ok(int) = num.parse() {
+                            int8 = int;
+                            state.memory.insert(&int8.to_be_bytes());
+                        } else if let Ok(int) = num.parse() {
+                            int16 = int;
+                            state.memory.insert(&int16.to_be_bytes());
+                        } else if let Ok(int) = num.parse() {
+                            int32 = int;
+                            state.memory.insert(&int32.to_be_bytes());
+                        } else if let Ok(int) = num.parse() {
+                            int64 = int;
+                            state.memory.insert(&int64.to_be_bytes());
+                        } else if let Ok(float) = num.parse() {
+                            float32 = float;
+                            state.memory.insert(&float32.to_be_bytes());
+                        } else if let Ok(float) = num.parse() {
+                            float64 = float;
+                            state.memory.insert(&float64.to_be_bytes());
+                        } else {
+                            panic!("somehow the tokenizer had an invalid number type")
+                        }
+                        
+                    }
                     CharLit(char) => {
                         let mut chars = String::from(*char);
                         while tokens.peek().token_type == Comma {
@@ -317,7 +348,13 @@ fn run_func(
             Word(Grow) => {
                 token = tokens.next();
                 match &token.token_type {
-                    Number(number) => state.memory.grow(*number as usize),
+                    Number(number) => {
+                        if let Ok(integer) = number.parse::<usize>() {
+                            state.memory.grow(integer);
+                        } else {
+                            return Err(SyntaxError::Expected { expected_token: "integer".to_string(), found: token })?
+                        }
+                    }
                     _ => {
                         return Err(SyntaxError::Expected {
                             expected_token: "number".to_string(),
@@ -333,7 +370,19 @@ fn run_func(
                         let next_token = tokens.next();
                         match &next_token.token_type {
                             Number(size) => {
-                                state.memory.remove(*pointer as usize, *size as usize);
+                                let parsed_pointer;
+                                let parsed_size;
+                                if let Ok(integer) = pointer.parse::<usize>() {
+                                    parsed_pointer = integer;
+                                } else {
+                                    return Err(SyntaxError::Expected { expected_token: "integer".to_string(), found: token })?
+                                }
+                                if let Ok(integer) = size.parse::<usize>() {
+                                    parsed_size = integer;
+                                } else {
+                                    return Err(SyntaxError::Expected { expected_token: "integer".to_string(), found: token })?
+                                }
+                                state.memory.remove(parsed_pointer, parsed_size);
                             }
                             _ => {
                                 return Err(SyntaxError::Expected {
@@ -415,6 +464,10 @@ fn run_func(
             Word(Declare) => run_variable_decleration(tokens, state)?,
             Word(Set) => run_variable_set(tokens, state)?,
             Word(Get) => run_variable_get(tokens, state)?,
+            Word(Cpy) => {
+                token = tokens.next();
+                // if let Number(num) => 
+            }
             Word(Cast) => {
                 token = tokens.next();
                 match token.token_type {
@@ -632,11 +685,11 @@ fn run_numeric_instruction(
             token = tokens.next();
             match token.token_type {
                 Number(num) => match num_type {
-                    NumericType::I128 => state.stack.push(StackValue::I128(num)),
-                    NumericType::I64 => state.stack.push(StackValue::I64(num as i64)),
-                    NumericType::I32 => state.stack.push(StackValue::I32(num as i32)),
-                    NumericType::I16 => state.stack.push(StackValue::I16(num as i16)),
-                    NumericType::I8 => state.stack.push(StackValue::I8(num as i8)),
+                    NumericType::I128 => state.stack.push(StackValue::I128(num.parse().unwrap())),
+                    NumericType::I64 => state.stack.push(StackValue::I64(num.parse().unwrap())),
+                    NumericType::I32 => state.stack.push(StackValue::I32(num.parse().unwrap())),
+                    NumericType::I16 => state.stack.push(StackValue::I16(num.parse().unwrap())),
+                    NumericType::I8 => state.stack.push(StackValue::I8(num.parse().unwrap() )),
                     NumericType::F32 => {
                         token = tokens.next();
                         if token.token_type != FullStop {
@@ -698,11 +751,11 @@ fn run_numeric_instruction(
                 token = tokens.next();
                 match token.token_type {
                     Number(num) => match num_type {
-                        NumericType::I128 => state.stack.push(StackValue::I128(num)),
-                        NumericType::I64 => state.stack.push(StackValue::I64(num as i64)),
-                        NumericType::I32 => state.stack.push(StackValue::I32(num as i32)),
-                        NumericType::I16 => state.stack.push(StackValue::I16(num as i16)),
-                        NumericType::I8 => state.stack.push(StackValue::I8(num as i8)),
+                        NumericType::I128 => state.stack.push(StackValue::I128(num.parse().unwrap())),
+                        NumericType::I64 => state.stack.push(StackValue::I64(num.parse().unwrap())),
+                        NumericType::I32 => state.stack.push(StackValue::I32(num.parse().unwrap())),
+                        NumericType::I16 => state.stack.push(StackValue::I16(num.parse().unwrap())),
+                        NumericType::I8 => state.stack.push(StackValue::I8(num.parse().unwrap() )),
                         NumericType::F32 => {
                             token = tokens.next();
                             if token.token_type != FullStop {
