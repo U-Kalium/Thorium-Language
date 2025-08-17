@@ -52,6 +52,7 @@ pub enum RuntimeError {
     MismatchLhsRhs { lhs: StackValue, rhs: StackValue },
     PoppingEmptyStack { popped_into: Token },
     NoValueFoundAtStackIndex { index: usize, token: Token },
+    TriedIndexingWithFloat {token: Token}
 }
 
 #[derive(Debug, Clone)]
@@ -204,6 +205,18 @@ impl StackValue {
                 bindind.to_vec()
             }
             StackValue::Null => todo!(),
+        }
+    }
+    fn as_usize(self) -> usize {
+        match self {
+            StackValue::I128(value) => value as usize,
+            StackValue::I64(value) => value as usize,
+            StackValue::I32(value) => value as usize,
+            StackValue::I16(value) => value as usize,
+            StackValue::I8(value) => value as usize,
+            StackValue::F32(value) => value as usize,
+            StackValue::F64(value) => value as usize,
+            StackValue::Null => 0 ,
         }
     }
 }
@@ -481,13 +494,23 @@ fn run_func(
             Word(Cpy) => {
                 token = tokens.next();
                 let pointer: usize;
-                if let Number(num) = token.token_type {
-                    pointer = num.parse().unwrap();
-                } else {
-                    return Err(SyntaxError::Expected {
+                match &token.token_type {
+                    Number(num) => pointer = num.parse().unwrap(),
+                    VarIdent(ident) => {
+                        if let Some(value) = state.variables.get(ident) {
+                            match value {
+                                StackValue::F32(_) => return Err(RuntimeError::TriedIndexingWithFloat { token })?,
+                                StackValue::F64(_) => return Err(RuntimeError::TriedIndexingWithFloat { token: token })?, 
+                                value => pointer = value.as_usize()
+                            }
+                        } else {
+                            return Err(SemanticError::UndefinedVar { ident: token })?;
+                        }
+                    }
+                    _ => return Err(SyntaxError::Expected {
                         expected_token: "number for pointer".to_string(),
                         found: token,
-                    })?;
+                    })?
                 }
                 token = tokens.next();
                 match &token.token_type {

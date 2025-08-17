@@ -6,9 +6,10 @@ fn copy_instruction() {
     let byte_code = 
 "
 func $start \"_start\" :
-    declare %a %b
-    i32 push 69 420 100 
-    cpy 1 %a
+    declare %a %b %c
+    i32 push 69 420 100 1
+    set %c
+    cpy %c %a
     insert 90
     insert 100
     insert 69
