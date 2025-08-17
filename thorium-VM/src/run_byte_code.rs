@@ -508,6 +508,7 @@ fn run_func(
                                 return Err(SemanticError::UndefinedVar { ident: token })?;
                             }
                         }
+                        Word(Top) => pointer = state.stack.len() - 1,
                         _ => return Err(SyntaxError::Expected {
                             expected_token: "number for pointer".to_string(),
                             found: token,
@@ -549,6 +550,7 @@ fn run_func(
                             return Err(SemanticError::UndefinedVar { ident: token })?;
                         }
                     }
+                    Word(Top) => pointer = state.stack.len() - 1,
                     _ => return Err(SyntaxError::Expected {
                         expected_token: "number for pointer".to_string(),
                         found: token,

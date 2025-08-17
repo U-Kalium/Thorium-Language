@@ -68,7 +68,8 @@ pub enum WordToken {
     Remove,
     Mem,
     Cpy,
-    Stack
+    Stack,
+    Top,
 }
 
 pub fn tokenize(content: String) -> Result<Vec<Token>, String> {
