@@ -21,6 +21,7 @@ pub enum TokenType {
     VarIdent(String),
     Dash,
     Comma,
+    Plus,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -67,6 +68,7 @@ pub enum WordToken {
     Remove,
     Mem,
     Cpy,
+    Stack
 }
 
 pub fn tokenize(content: String) -> Result<Vec<Token>, String> {
@@ -221,6 +223,14 @@ pub fn tokenize(content: String) -> Result<Vec<Token>, String> {
                 ',' => {
                     tokens.push(Token {
                         token_type: TokenType::Comma,
+                        line: file_line,
+                        column: column - 1
+                    });
+                    content_chars.next();
+                }
+                '+' => {
+                    tokens.push(Token {
+                        token_type: TokenType::Plus,
                         line: file_line,
                         column: column - 1
                     });

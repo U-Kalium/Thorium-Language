@@ -1,4 +1,4 @@
-use core::panic;
+use core::{num, panic};
 use std::collections::HashMap;
 
 use crate::Error;
@@ -489,11 +489,53 @@ fn run_func(
             Word(F64) => run_numeric_instruction(tokens, state, NumericType::F64)?,
             Word(F32) => run_numeric_instruction(tokens, state, NumericType::F32)?,
             Word(Declare) => run_variable_decleration(tokens, state)?,
-            Word(Set) => run_variable_set(tokens, state)?,
+            Word(Set) => {
+                let peeked = tokens.peek();
+                if let Word(Stack) = peeked.token_type {
+                    tokens.next();
+                    token = tokens.next();
+                    let mut pointer: usize;
+                    match &token.token_type {
+                        Number(num) => pointer = num.parse().unwrap(),
+                        VarIdent(ident) => {
+                            if let Some(value) = state.variables.get(ident) {
+                                match value {
+                                    StackValue::F32(_) => return Err(RuntimeError::TriedIndexingWithFloat { token })?,
+                                    StackValue::F64(_) => return Err(RuntimeError::TriedIndexingWithFloat { token: token })?, 
+                                    value => pointer = value.as_usize()
+                                }
+                            } else {
+                                return Err(SemanticError::UndefinedVar { ident: token })?;
+                            }
+                        }
+                        _ => return Err(SyntaxError::Expected {
+                            expected_token: "number for pointer".to_string(),
+                            found: token,
+                        })?
+                    }
+                    let peeked = tokens.peek();
+                    if let Plus = peeked.token_type {
+                        tokens.next();
+                        token = tokens.next();
+                        if let Number(num) = &token.token_type {
+                            pointer += num.parse::<usize>().unwrap()
+                        } else {
+                            return Err(SyntaxError::Expected { expected_token: "number".to_string(), found: token })?
+                        }
+                    }
+                    if let Some(value) = state.stack.pop() {
+                        state.stack[pointer] = value
+                    } else {
+                        return Err(RuntimeError::PoppingEmptyStack { popped_into: token })?;
+                    }
+                } else {
+                    run_variable_set(tokens, state)?
+                }
+            },
             Word(Get) => run_variable_get(tokens, state)?,
             Word(Cpy) => {
                 token = tokens.next();
-                let pointer: usize;
+                let mut pointer: usize;
                 match &token.token_type {
                     Number(num) => pointer = num.parse().unwrap(),
                     VarIdent(ident) => {
@@ -511,6 +553,16 @@ fn run_func(
                         expected_token: "number for pointer".to_string(),
                         found: token,
                     })?
+                }
+                let peeked = tokens.peek();
+                if let Plus = peeked.token_type {
+                    tokens.next();
+                    token = tokens.next();
+                    if let Number(num) = token.token_type {
+                        pointer += num.parse::<usize>().unwrap()
+                    } else {
+                        return Err(SyntaxError::Expected { expected_token: "number".to_string(), found: token })?
+                    }
                 }
                 token = tokens.next();
                 match &token.token_type {

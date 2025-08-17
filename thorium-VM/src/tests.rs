@@ -7,9 +7,11 @@ fn copy_instruction() {
 "
 func $start \"_start\" :
     declare %a %b %c
-    i32 push 69 420 100 1
+    i32 push 69 30 100 0
     set %c
-    cpy %c %a
+    i32 push 420
+    set stack %c + 1
+    cpy %c + 1 %a
     insert 90
     insert 100
     insert 69
