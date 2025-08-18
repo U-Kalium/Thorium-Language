@@ -1,6 +1,6 @@
 use std::{env, fs, process::Command};
 
-use crate::{parser::parse, tokenizer::tokanize};
+use crate::{parser::parse, tokenizer::{tokanize, TokenIter}};
 
 mod parser;
 mod tokenizer;
@@ -8,8 +8,8 @@ mod tokenizer;
 
 fn main() {
     let command_line_args: Vec<String> = env::args().collect();
-    let file_name = command_line_args[1].clone();
-    // let file_name = "examples/variables.th".to_string();
+    // let file_name = command_line_args[1].clone();
+    let file_name = "examples/arrays.th".to_string();
 
     let file_content =
         fs::read_to_string(file_name.clone()).expect("Should have been able to read the file");
@@ -18,7 +18,7 @@ fn main() {
 
     // println!("tokens:\n{:?}", tokens);
 
-    let byte_code = parse(&mut tokens.iter().peekable());
+    let byte_code = parse(&mut TokenIter::new(tokens));
     let mut byte_code_filename = file_name.clone();
     byte_code_filename.push('b');
 

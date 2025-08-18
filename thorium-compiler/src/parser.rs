@@ -1,8 +1,8 @@
 use std::collections::HashMap;
-use std::{collections::HashSet, iter::Peekable};
+use std::{collections::HashSet};
 
-use crate::tokenizer::TokenType::*;
-use crate::tokenizer::{Number, Token};
+use crate::tokenizer::TokenType::{self, *};
+use crate::tokenizer::{Number, Token, TokenIter};
 
 struct FunctionType {
     parems: HashMap<String, String>,
@@ -60,6 +60,11 @@ enum Expression {
         lhs: Box<Expression>,
         rhs: Box<Expression>,
     },
+    IndexedArray {
+        expr_type: TypeDescription,
+        variable: String,
+        index: Box<Expression>,
+    },
 }
 
 struct Parser {
@@ -77,11 +82,11 @@ impl Parser {
         }
     }
 
-    fn parse_func<'a, I: Iterator<Item = &'a Token>>(
+    fn parse_func(
         &mut self,
-        tokens: &mut Peekable<I>,
+        tokens: &mut TokenIter,
     ) -> String {
-        fn parse_func_args<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peekable<I>) -> String {
+        fn parse_func_args(tokens: &mut TokenIter) -> String {
             let func_args = String::new();
             let token = tokens.next().unwrap();
             match &token.token_type {
@@ -152,9 +157,9 @@ impl Parser {
         func
     }
 
-    fn parse_scope<'a, I: Iterator<Item = &'a Token>>(
+    fn parse_scope(
         &mut self,
-        tokens: &mut Peekable<I>,
+        tokens: &mut TokenIter,
         return_type: Vec<TypeDescription>,
         variables: &mut HashMap<String, VariableProperties>,
     ) -> String {
@@ -177,15 +182,17 @@ impl Parser {
         scope
     }
 
-    fn parse_type<'a, I: Iterator<Item = &'a Token>>(
+    fn parse_type(
         &mut self,
-        tokens: &mut Peekable<I>,
+        tokens: &mut TokenIter,
     ) -> TypeDescription {
         let mut parsed_type = TypeDescription {
             modifier: ModifierType::None,
-            _type: String::new()
+            _type: String::new(),
         };
-        fn parse_standalone_type<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peekable<I>) -> String {
+        fn parse_standalone_type(
+            tokens: &mut TokenIter,
+        ) -> String {
             let token = tokens.next().unwrap();
             match &token.token_type {
                 I64 => "i64".to_string(),
@@ -202,12 +209,15 @@ impl Parser {
                 ),
             }
         }
-        fn parse_dependent_type<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peekable<I>) -> ModifierType {
-            let mut token = *tokens.peek().unwrap();
-            match &token.token_type {
+        fn parse_dependent_type(
+            tokens: &mut TokenIter,
+        ) -> ModifierType {
+            let mut token = tokens.peek().unwrap();
+            match token.token_type {
                 OpenSquareBracket => {
+                    tokens.next();
                     token = tokens.next().unwrap();
-                    match &token.token_type {
+                    match token.token_type {
                         NumberLit(num) => {
                             token = tokens.next().unwrap();
                             match &token.token_type {
@@ -217,7 +227,7 @@ impl Parser {
                                 t => panic!(
                                     "Syntax Error: expected array parem, found {t:?} at {}:{} ",
                                     token.line, token.column
-                                ), 
+                                ),
                             }
                         }
                         t => panic!(
@@ -226,7 +236,7 @@ impl Parser {
                         ),
                     }
                 }
-                _ => ModifierType::None
+                _ => ModifierType::None,
             }
         }
         parsed_type.modifier = parse_dependent_type(tokens);
@@ -235,17 +245,16 @@ impl Parser {
         parsed_type
     }
 
-    fn parse_statement<'a, I: Iterator<Item = &'a Token>>(
+    fn parse_statement(
         &mut self,
-        tokens: &mut Peekable<I>,
+        tokens: &mut TokenIter,
         variables: &mut HashMap<String, VariableProperties>,
         scope_return_type: Vec<TypeDescription>,
     ) -> String {
         let mut statement = String::new();
-        let mut token = tokens.next().unwrap();
-        fn parse_else<'a, I: Iterator<Item = &'a Token>>(
+        fn parse_else(
             parser: &mut Parser,
-            tokens: &mut Peekable<I>,
+            tokens: &mut TokenIter,
             variables: &mut HashMap<String, VariableProperties>,
             // token: &'a Token,
             scope_return_type: Vec<TypeDescription>,
@@ -267,11 +276,11 @@ impl Parser {
                 statement.push_str(&parser.parse_scope(tokens, scope_return_type, variables))
             }
         }
-        fn parse_if<'a, I: Iterator<Item = &'a Token>>(
+        fn parse_if(
             parser: &mut Parser,
-            tokens: &mut Peekable<I>,
+            tokens: &mut TokenIter,
             variables: &mut HashMap<String, VariableProperties>,
-            token: &'a Token,
+            token: Token,
             scope_return_type: Vec<TypeDescription>,
             statement: &mut String,
         ) {
@@ -299,65 +308,26 @@ impl Parser {
             }
             statement.push_str(&format!("@{end_if_label}\n"));
         }
-
+        let mut token = tokens.peek().unwrap();
         match &token.token_type {
             Finish => {
-                token = tokens.next().unwrap();
-                match &token.token_type {
-                    NumberLit(number) => {
-                        let return_type = &scope_return_type[0];
-                        if let ModifierType::None = return_type.modifier {
-                            statement
-                                .push_str(&format!("    {} push {number}\n", return_type._type));
-                        } else {
-                            todo!("Proper error handeling for finsish having a number but return type having a modifier");
-                        }
-                    }
-                    Ident(ident) => {
-                        if !variables.contains_key(ident) {
-                            panic!(
-                                "Error: Variable {ident} does not exist yet was used at {}:{}",
-                                token.line, token.column
-                            )
-                        }
-                        statement.push_str(&format!("    get %{ident}\n"));
-                    }
-                    t => panic!(
-                        "Syntax Error: expected i32 after return, found {t:?} at {}:{} ",
-                        token.line, token.column
-                    ),
+                tokens.next();
+                let expression = self.parse_expression(tokens, variables);
+                if scope_return_type[0] != expression.expression_type {
+                    todo!("Proper Error for handeling scope return and expression type mismatch");
                 }
-                statement.push_str("    return\n");
+                statement.push_str(&expression.byte_code);
             }
             Return => {
-                token = tokens.next().unwrap();
-                match &token.token_type {
-                    NumberLit(number) => {
-                        let return_type = &scope_return_type[0];
-                        if let ModifierType::None = return_type.modifier {
-                            statement
-                                .push_str(&format!("    {} push {number}\n", return_type._type));
-                        } else {
-                            todo!("Proper error handeling for return having a number but return type having a modifier");
-                        }
-                    }
-                    Ident(ident) => {
-                        if !variables.contains_key(ident) {
-                            panic!(
-                                "Error: Variable {ident} does not exist yet was used at {}:{}",
-                                token.line, token.column
-                            )
-                        }
-                        statement.push_str(&format!("    get %{ident}\n"));
-                    }
-                    t => panic!(
-                        "Syntax Error: expected i32 after return, found {t:?} at {}:{} ",
-                        token.line, token.column
-                    ),
+                tokens.next();
+                let expression = self.parse_expression(tokens, variables);
+                if scope_return_type[0] != expression.expression_type {
+                    todo!("Proper Error for handeling scope return and expression type mismatch");
                 }
-                // statement.push_str("    return\n");
+                statement.push_str(&expression.byte_code);
             }
             Var => {
+                tokens.next();
                 token = tokens.next().unwrap();
                 match &token.token_type {
                     Ident(ident) => {
@@ -373,7 +343,7 @@ impl Parser {
                             NewLine => {}
                             SemiColon => {}
                             _ => {
-                                statement.push_str(&self.parse_assignment(tokens, variables, ident))
+                                statement.push_str(&self.parse_assignment(tokens, variables, &ident))
                             }
                         }
                     }
@@ -384,6 +354,7 @@ impl Parser {
                 }
             }
             Let => {
+                tokens.next();
                 token = tokens.next().unwrap();
                 match &token.token_type {
                     Ident(ident) => {
@@ -399,7 +370,7 @@ impl Parser {
                             NewLine => {}
                             SemiColon => {}
                             _ => {
-                                statement.push_str(&self.parse_assignment(tokens, variables, ident))
+                                statement.push_str(&self.parse_assignment(tokens, variables, &ident))
                             }
                         }
                     }
@@ -410,6 +381,7 @@ impl Parser {
                 }
             }
             If => {
+                tokens.next();
                 parse_if(
                     self,
                     tokens,
@@ -420,6 +392,7 @@ impl Parser {
                 );
             }
             Ident(ident) => {
+                tokens.next();
                 if let Some(variable_properties) = variables.get(ident) {
                     if !variable_properties.is_mutable {
                         panic!(
@@ -435,6 +408,8 @@ impl Parser {
                     )
                 }
             }
+            NewLine => {}
+            SemiColon => {}
 
             t => panic!(
                 "Syntax Error: expected statement, found {t:?} at {}:{} ",
@@ -453,47 +428,63 @@ impl Parser {
         statement
     }
 
-    fn parse_expression<'a, I: Iterator<Item = &'a Token>>(
+    fn parse_expression(
         &mut self,
-        tokens: &mut Peekable<I>,
+        tokens: &mut TokenIter,
         variables: &HashMap<String, VariableProperties>,
     ) -> ExpressionReturn {
         let mut expression = ExpressionReturn {
             expression_type: TypeDescription {
                 modifier: ModifierType::None,
-                _type: String::new()
+                _type: String::new(),
             },
             byte_code: String::new(),
         };
         let mut expression_tokens = Vec::new();
+        let mut no_of_open_square_brackets = 0;
         while match tokens.peek().unwrap().token_type {
             Ident(_) => true,
             DoubleEqual => true,
             NumberLit(_) => true,
+            OpenSquareBracket => {
+                no_of_open_square_brackets += 1;
+                true
+            }
+            CloseSquareBracket => {
+                if no_of_open_square_brackets > 0 {
+                    no_of_open_square_brackets -= 1;
+                    true
+                } else {
+                    false
+                }
+            }
             _ => false,
         } {
             let token = tokens.next().unwrap();
             expression_tokens.push(token);
         }
-        let expr_tokens: Peekable<std::slice::Iter<'_, &'a Token>> =
-            expression_tokens.iter().peekable();
-        fn collect_expr<'a>(
-            mut tokens: Peekable<std::slice::Iter<'_, &'a Token>>,
+        let mut expr_tokens =
+            TokenIter::new(expression_tokens);
+        fn collect_expr(
+            tokens: &mut TokenIter,
             variables: &HashMap<String, VariableProperties>,
+            parser: &mut Parser,
         ) -> Expression {
             let token = tokens.next().unwrap();
             match &token.token_type {
                 NumberLit(num) => {
-                    if let Some(token) = tokens.next() {
+                    let peeked = tokens.peek();
+                    if let Some(token) = peeked {
                         // token needs to be an operation
                         match &token.token_type {
                             DoubleEqual => {
-                                if let Some(token) = tokens.clone().peek() {
+                                tokens.next();
+                                if let Some(token) = tokens.peek() {
                                     let mut num_type = TypeDescription {
                                         modifier: ModifierType::None,
-                                        _type: "i64".to_string()
+                                        _type: "i64".to_string(),
                                     };
-                                    let rhs = collect_expr(tokens, variables);
+                                    let rhs = collect_expr(tokens, variables, parser);
                                     match &rhs {
                                         Expression::Variable(ident) => {
                                             let prop = variables.get(ident).unwrap();
@@ -504,8 +495,8 @@ impl Parser {
                                             lhs: _,
                                             rhs: _,
                                         } => panic!(
-                                            "Error: can not chain conditionals together like at {}:{}",
-                                            token.line, token.column
+                                            // "Error: can not chain conditionals together like at {}:{}",
+                                            // &token.line, &token.column
                                         ),
                                         _ => {}
                                     }
@@ -524,17 +515,19 @@ impl Parser {
                                     )
                                 }
                             }
+                            CloseSquareBracket => {
+
+                            }
                             op => todo!("operation: {op:?} not implemented"),
                         }
-                    } else {
-                        return Expression::Value {
-                            expr_type: TypeDescription {
-                                        modifier: ModifierType::None,
-                                        _type: "i64".to_string()
-                                    },
-                            value: Value::Number(num.clone()),
-                        };
                     }
+                    return Expression::Value {
+                        expr_type: TypeDescription {
+                            modifier: ModifierType::None,
+                            _type: "i64".to_string(),
+                        },
+                        value: Value::Number(num.clone()),
+                    };
                 }
                 Ident(ident) => {
                     if !variables.contains_key(ident) {
@@ -556,9 +549,9 @@ impl Parser {
                                 // } else {
                                 //     panic!("Syntax Error: expected ident or literal found nothing at {}:{}", token.line, token.column)
                                 // }
-                                if let Some(token) = tokens.clone().peek() {
+                                if let Some(token) = tokens.peek() {
                                     // let mut num_type = "i64".to_string();
-                                    let mut rhs = collect_expr(tokens, variables);
+                                    let mut rhs = collect_expr(tokens, variables, parser);
                                     match &mut rhs {
                                         Expression::Value {
                                             expr_type,
@@ -572,8 +565,8 @@ impl Parser {
                                             lhs: _,
                                             rhs: _,
                                         } => panic!(
-                                            "Error: can not chain conditionals together like at {}:{}",
-                                            token.line, token.column
+                                            // "Error: can not chain conditionals together like at {}:{}",
+                                            // token.line, token.column
                                         ),
                                         _ => {}
                                     }
@@ -587,6 +580,26 @@ impl Parser {
                                         "Syntax Error: expected ident or literal found nothing at {}:{}",
                                         token.line, token.column
                                     )
+                                }
+                            }
+                            OpenSquareBracket => {
+                                let index = collect_expr(tokens, variables, parser);
+                                let mut next_token = tokens.next().unwrap();
+                                if let CloseSquareBracket = next_token.token_type {
+                                } else {
+                                    todo!(
+                                        "Proper error for when indexing into array and missing closing bracket"
+                                    )
+                                }
+                                let array_expr_type = &variables.get(ident).unwrap().variable_type;
+                                let expr_type = TypeDescription {
+                                    modifier: ModifierType::None,
+                                    _type: array_expr_type._type.clone()
+                                };
+                                Expression::IndexedArray {
+                                    expr_type: expr_type.clone(),
+                                    variable: ident.to_string(),
+                                    index: Box::new(index),
                                 }
                             }
                             op => todo!("operation: {op:?} not implemented"),
@@ -623,10 +636,10 @@ impl Parser {
                 } => {
                     expr_string.push_str(&parse_expr_tree(lhs, variables));
                     expr_string.push_str(&parse_expr_tree(rhs, variables));
-                    let mut operation_type =  TypeDescription {
-                                                                modifier: ModifierType::None,
-                                                                _type: "i64".to_string()
-                                                            };
+                    let mut operation_type = TypeDescription {
+                        modifier: ModifierType::None,
+                        _type: "i64".to_string(),
+                    };
                     match &**lhs {
                         Expression::Value {
                             expr_type,
@@ -657,10 +670,53 @@ impl Parser {
                     }
                     expr_string.push_str("    cast i8\n");
                 }
+                Expression::IndexedArray {
+                    expr_type,
+                    variable,
+                    index,
+                } => {
+                    match &**index {
+                        Expression::Variable(ident) => {
+                            let variable = variables.get(ident).unwrap();
+                            if (TypeDescription {
+                                modifier: ModifierType::None,
+                                _type: "i64".to_string(),
+                            }) != variable.variable_type
+                            {
+                                todo!(
+                                    "Proper error for indexing an array witha  variable of incorrect type"
+                                )
+                            }
+                            expr_string.push_str(&format!("    get %{ident}\n"));
+                        }
+                        Expression::Value { expr_type, value } => match value {
+                            Value::Custom(_) => todo!(
+                                "Proper error for trying to index an array witha  non number value"
+                            ),
+                            Value::Number(number) => {
+                                expr_string.push_str(&format!("    i64 push {number}\n"))
+                            }
+                        },
+                        Expression::IndexedArray {
+                            expr_type,
+                            variable,
+                            index,
+                        } => expr_string.push_str(&parse_expr_tree(&index, variables)),
+                        _ => todo!(
+                            "Proper Error when trying to index an array with an incorrect expression type"
+                        )
+                    }
+                    expr_string.push_str(&format!("    i64 push 1\n"));
+                    expr_string.push_str(&format!("    i64 add\n"));
+                    expr_string.push_str(&format!("    cpy %{variable} - top top\n"));
+
+                } 
+
+                
             }
             expr_string
         }
-        let expression_tree = collect_expr(expr_tokens, variables);
+        let expression_tree = collect_expr(&mut expr_tokens, variables, self);
         // dbg!(&expression_tree);
         let byte_code = parse_expr_tree(&expression_tree, variables);
         // dbg!(&byte_code);
@@ -679,99 +735,236 @@ impl Parser {
                 condition: _,
                 lhs: _,
                 rhs: _,
-            } => expression.expression_type = TypeDescription {
-                modifier: ModifierType::None,
-                _type: "bool".to_string()
-            },
+            } => {
+                expression.expression_type = TypeDescription {
+                    modifier: ModifierType::None,
+                    _type: "bool".to_string(),
+                }
+            }
+            Expression::IndexedArray {
+                expr_type,
+                variable,
+                index,
+            } => expression.expression_type = expr_type.clone(),
         }
 
         expression
     }
 
-    fn parse_assignment<'a, I: Iterator<Item = &'a Token>>(
+    fn parse_assignment(
         &mut self,
-        tokens: &mut Peekable<I>,
+        tokens: &mut TokenIter,
         variables: &mut HashMap<String, VariableProperties>,
-        variable: &String,
+        variable_to_be_assign: &String,
     ) -> String {
         let mut assignment = String::new();
         let peeked_token = tokens.peek().unwrap();
+        let mut variable_to_be_assign_type = variables
+            .get(variable_to_be_assign)
+            .unwrap()
+            .variable_type
+            .clone();
+        fn parse_value_assignment(
+            token: &Token,
+            variable_to_be_assign: &String,
+            variables: &mut HashMap<String, VariableProperties>,
+            state: &mut Parser,
+            tokens: &mut TokenIter,
+            assignment: &mut String,
+            variable_to_be_assign_type: TypeDescription,
+        ) {
+            match &token.token_type {
+                OpenCurlyBracket => {
+                    let varibale_type = variables
+                        .get(variable_to_be_assign)
+                        .unwrap()
+                        .variable_type
+                        .clone();
+                    assignment.push_str(&state.parse_scope(tokens, vec![varibale_type], variables))
+                }
+                Equal => {
+                    tokens.next().unwrap();
+                    let mut token = tokens.peek().unwrap();
+
+                    match &token.token_type {
+                        NumberLit(num) => {
+                            let expression = state.parse_expression(tokens, variables);
+                            assignment.push_str(&expression.byte_code);
+                        }
+                        Ident(ident) => {
+                            let expression = state.parse_expression(tokens, variables);
+                            assignment.push_str(&expression.byte_code);
+                        }
+                        True => {
+                            tokens.next();
+                            if variable_to_be_assign_type
+                                == (TypeDescription {
+                                    modifier: ModifierType::None,
+                                    _type: "bool".to_string(),
+                                })
+                            {
+                                assignment.push_str(&format!("    i8 push 1"));
+                            } else {
+                                panic!(
+                                    "Error: tried assigning a bool type to {:?} at {}:{}",
+                                    token.token_type, token.line, token.column
+                                )
+                            }
+                        }
+                        False => {
+                            tokens.next();
+                            if variable_to_be_assign_type
+                                == (TypeDescription {
+                                    modifier: ModifierType::None,
+                                    _type: "bool".to_string(),
+                                })
+                            {
+                                assignment.push_str(&format!("    i8 push 0"));
+                            } else {
+                                panic!(
+                                    "Error: tried assigning a bool type to {:?} at {}:{}",
+                                    token.token_type, token.line, token.column
+                                )
+                            }
+                        }
+                        OpenSquareBracket => {
+                            tokens.next();
+                            assignment.push_str(&state.parse_array_expr(
+                                tokens,
+                                variables,
+                                variable_to_be_assign_type,
+                            ));
+                        }
+                        t => panic!(
+                            "Syntax Error: expected int or variable, found {t:?} at {}:{} ",
+                            token.line, token.column
+                        ),
+                    }
+                }
+                t => panic!(
+                    "Syntax Error: expected {{}} or = , found {t:?} at {}:{} ",
+                    token.line, token.column
+                ),
+            }
+        }
         match &peeked_token.token_type {
             OpenCurlyBracket => {
-                let varibale_type = variables.get(variable).unwrap().variable_type.clone();
-                assignment.push_str(&self.parse_scope(tokens, vec![varibale_type], variables))
+                parse_value_assignment(
+                    &peeked_token,
+                    variable_to_be_assign,
+                    variables,
+                    self,
+                    tokens,
+                    &mut assignment,
+                    variable_to_be_assign_type,
+                );
+                assignment.push_str(&format!("    set %{variable_to_be_assign}\n"));
             }
             Equal => {
+                parse_value_assignment(
+                    &peeked_token,
+                    variable_to_be_assign,
+                    variables,
+                    self,
+                    tokens,
+                    &mut assignment,
+                    variable_to_be_assign_type,
+                );
+                assignment.push_str(&format!("    set %{variable_to_be_assign}\n"));
+            }
+            OpenSquareBracket => {
+                let array_index: usize;
+                let mut token;
                 tokens.next().unwrap();
-                let token = tokens.next().unwrap();
-                let variable_type = variables.get(variable).unwrap().variable_type.clone();
-                match &token.token_type {
-                    NumberLit(num) => {
-                        if let TypeDescription {
-                            modifier: ModifierType::None,
-                            _type
-                        } = variable_type {
-                            assignment.push_str(&format!("    {_type} push {num}\n"))
-                        } else {
-                            todo!("proper error for assining numblit to a variable type witha  modifier")
-                        }
-                    }
-                    Ident(ident) => {
-                        if let Some(variable_properties) = variables.get(ident) {
-                            let variable_type =
-                                variables.get(variable).unwrap().variable_type.clone();
-                            if variable_type == variable_properties.variable_type {
-                                assignment.push_str(&format!("    get %{ident}\n"));
-                            }
-                        } else {
-                            panic!(
-                                "Error: tried assigning an unkown identifier {ident} to variable {variable}"
-                            );
-                        }
-                    }
-                    True => {
-                        if variable_type == (TypeDescription {
-                            modifier: ModifierType::None,
-                            _type: "bool".to_string()
-                        }) {
-                            assignment.push_str(&format!("    i8 push 1"));
-                        } else {
-                            panic!(
-                                "Error: tried assigning a bool type to {:?} at {}:{}",
-                                token.token_type, token.line, token.column
-                            )
-                        }
-                    }
-                    False => {
-                        if variable_type == (TypeDescription {
-                            modifier: ModifierType::None,
-                            _type: "bool".to_string()
-                        }) {
-                            assignment.push_str(&format!("    i8 push 0"));
-                        } else {
-                            panic!(
-                                "Error: tried assigning a bool type to {:?} at {}:{}",
-                                token.token_type, token.line, token.column
-                            )
-                        }
-                    }
-                    t => panic!(
-                        "Syntax Error: expected int or variable, found {t:?} at {}:{} ",
-                        token.line, token.column
-                    ),
+                token = tokens.next().unwrap();
+                if let NumberLit(num) = &token.token_type {
+                    array_index = num.parse().unwrap();
+                } else {
+                    todo!("Proper error for when a none number is used to index array")
                 }
+                token = tokens.next().unwrap();
+                if let CloseSquareBracket = token.token_type {
+                    // array_index = num.parse().unwrap();
+                } else {
+                    todo!("Proper error for when a ] isnt used to end array indexing")
+                }
+                // out of bounds check
+                if let ModifierType::FixedArray(array_size) = variable_to_be_assign_type.modifier {
+                    if array_index >= array_size {
+                        todo!("Proper error for indexing out of array bounds")
+                    }
+                }
+                let peeked_token = tokens.peek().unwrap();
+                variable_to_be_assign_type.modifier = ModifierType::None;
+                parse_value_assignment(
+                    &peeked_token,
+                    variable_to_be_assign,
+                    variables,
+                    self,
+                    tokens,
+                    &mut assignment,
+                    variable_to_be_assign_type,
+                );
+                assignment.push_str(&format!(
+                    "    set stack %{variable_to_be_assign} - {}\n", array_index +1
+                ));
             }
             t => panic!(
                 "Syntax Error: expected {{}} or = , found {t:?} at {}:{} ",
                 peeked_token.line, peeked_token.column
             ),
         }
-        assignment.push_str(&format!("    set %{variable}\n"));
         assignment
+    }
+
+    fn parse_array_expr(
+        &mut self,
+        tokens: &mut TokenIter,
+        variables: &mut HashMap<String, VariableProperties>,
+        array_type: TypeDescription,
+    ) -> String {
+        let mut parsed_array = String::new();
+        match array_type.modifier {
+            ModifierType::DynamicArray => todo!(),
+            ModifierType::FixedArray(size) => {
+                let mut token;
+                let mut elem_index = 0;
+                let mut elements = Vec::new();
+                while tokens.peek().unwrap().token_type != CloseSquareBracket {
+                    if elem_index > size {
+                        todo!("Proper Error for when an array expr is longer than array type")
+                    }
+                    // tokens.next();
+                    // _ = tokens.next().unwrap();
+                    elements.push(self.parse_expression(tokens, variables));
+
+                    token = tokens.next().unwrap();
+                    if let Comma = token.token_type {
+                        _ = tokens.next_if(|token| token.token_type == NewLine);
+                    } else {
+                        todo!(
+                            "Proper Error a comma not being present after an expression during array parsing"
+                        )
+                    }
+                    elem_index += 1;
+                }
+                for element in elements.iter().rev() {
+                    if element.expression_type._type != array_type._type {
+                        todo!("Proper Error for when an array expr isnt array element type")
+                    }
+                    parsed_array.push_str(&element.byte_code);
+                }
+                parsed_array.push_str(&format!("    i64 push {size}\n"));
+                parsed_array.push_str(&format!("    i64 push top\n"));
+                tokens.next();
+            }
+            _ => todo!("Proper Error for trying to assing a array expr to a none array type"),
+        }
+        parsed_array
     }
 }
 
-pub fn parse<'a, I: Iterator<Item = &'a Token>>(tokens: &mut Peekable<I>) -> String {
+pub fn parse(tokens: &mut TokenIter) -> String {
     let mut parser = Parser::new();
     let mut bin = String::new();
     bin.push_str(

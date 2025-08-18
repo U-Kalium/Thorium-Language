@@ -1,0 +1,46 @@
+
+func $start "_start" :
+    call $main
+    return
+
+func $main:
+    declare %a
+    i64 push 10
+    i64 push 9
+    i64 push 8
+    i64 push 7
+    i64 push 6
+    i64 push 5
+    i64 push 5
+    i64 push 3
+    i64 push 2
+    i64 push 1
+    i64 push 10
+    i64 push top
+    set %a
+    declare %b
+    i64 push 3
+    i64 push 1
+    i64 add
+    cpy %a - top top
+    set %b
+    declare %c
+    i64 push 420
+    set %c
+    i64 push 69
+    set stack %a - 1
+    get %b
+    i64 push 4
+    i64 eq
+    cast i8
+    jpz "elseL14C5"
+    i64 push 0
+    i64 push 1
+    i64 add
+    cpy %a - top top
+    i8 push 1
+    jmp "ifendL14C5"
+@elseL14C5
+    get %b
+@ifendL14C5
+endfunc

@@ -16,7 +16,7 @@ impl Display for Number {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum TokenType {
     Fn,
     Ident(String),
@@ -50,12 +50,60 @@ pub enum TokenType {
     Add,
     SemiColon,
     NewLine,
+    Comma,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Token {
     pub token_type: TokenType,
     pub line: u32,
     pub column: u32,
+}
+
+pub struct TokenIter {
+    tokens: Vec<Token>,
+    index: usize,
+    just_initialized: bool,
+}
+
+impl TokenIter {
+    pub fn new(tokens: Vec<Token>) -> Self {
+        Self {
+            tokens,
+            index: 0,
+            just_initialized: true
+        }
+    }
+    pub fn next(&mut self) -> Option<Token> {
+        if self.just_initialized {
+            self.just_initialized = false;
+            self.tokens.get(self.index).cloned()
+        } else {
+            self.index += 1;
+            self.tokens.get(self.index).cloned()
+        }
+    }
+    pub fn next_if(&mut self, condition: impl Fn(&Token) -> bool) -> Option<Token> {
+        if condition(&self.tokens[self.index + 1]) {
+            self.index += 1;
+            self.tokens.get(self.index).cloned()
+        } else {
+            None
+        }
+    }
+    pub fn current(&mut self) -> Token {
+        self.tokens[self.index].clone()
+    }
+    pub fn reset(&mut self) {
+        self.index = 0
+    }
+    pub fn peek(&mut self) -> Option<Token> {
+        if self.just_initialized {
+            // self.just_initialized = false;
+            self.tokens.get(self.index).cloned()
+        } else {
+            self.tokens.get(self.index+1).cloned()
+        }
+    }
 }
 
 pub fn tokanize(content: String) -> Vec<Token> {
@@ -299,6 +347,14 @@ pub fn tokanize(content: String) -> Vec<Token> {
                     content_chars.next();
                     file_line += 1;
                     column = 1;
+                }
+                ',' => {
+                    tokens.push(Token {
+                        token_type: TokenType::Comma,
+                        line: file_line,
+                        column: column - 1,
+                    });
+                    content_chars.next();
                 }
                 _ => panic!("unkown character: {}", peeked),
             }
