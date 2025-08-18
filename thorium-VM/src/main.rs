@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 // use std::env;
 use std::{env, fs};
 
@@ -72,7 +73,7 @@ fn main() -> Result<(), Error>{
     // println!("returned: {:?}", state.run())
 }
 
-pub fn tokenize_and_run(byte_code: String) -> Result<Vec<StackValue>, Error> {
+pub fn tokenize_and_run(byte_code: String) -> Result<(Vec<StackValue>, HashMap<String, StackValue>), Error> {
     let tokens = tokenize(byte_code).unwrap();
     run(&tokens)
 }

@@ -269,7 +269,7 @@ impl TokenIter {
     }
 }
 
-pub fn run(tokens: &Vec<Token>) -> Result<Vec<StackValue>, Error> {
+pub fn run(tokens: &Vec<Token>) -> Result<(Vec<StackValue>, HashMap<String, StackValue>), Error> {
     let mut state = MachineState::new();
     let mut token_iter = TokenIter {
         tokens: tokens.clone(),
@@ -282,7 +282,7 @@ pub fn run(tokens: &Vec<Token>) -> Result<Vec<StackValue>, Error> {
     println!("exported funcs: {:?}", state.exports);
     let start_func_index = state.exports.get("_start").unwrap().clone();
     run_func(&mut token_iter, &mut state, start_func_index)?;
-    Ok(state.stack)
+    Ok((state.stack, state.variables))
 }
 
 fn run_func(
@@ -515,14 +515,32 @@ fn run_func(
                         })?
                     }
                     let peeked = tokens.peek();
-                    if let Plus = peeked.token_type {
-                        tokens.next();
-                        token = tokens.next();
-                        if let Number(num) = &token.token_type {
-                            pointer += num.parse::<usize>().unwrap()
-                        } else {
-                            return Err(SyntaxError::Expected { expected_token: "number".to_string(), found: token })?
+                    match peeked.token_type {
+                        Plus => {
+                            tokens.next();
+                            token = tokens.next();
+                            match &token.token_type {
+                                Number(num) => pointer += num.parse::<usize>().unwrap(),
+                                Word(Top) => {
+                                    let top_of_stack = state.stack[state.stack.len() - 1].as_usize();
+                                    pointer += top_of_stack
+                                }
+                                _ => return Err(SyntaxError::Expected { expected_token: "number, or top".to_string(), found: token })?
+                            }
                         }
+                        Minus => {
+                            tokens.next();
+                            token = tokens.next();
+                            match &token.token_type {
+                                Number(num) => pointer -= num.parse::<usize>().unwrap(),
+                                Word(Top) => {
+                                    let top_of_stack = state.stack[state.stack.len() - 1].as_usize();
+                                    pointer -= top_of_stack
+                                }
+                                _ => return Err(SyntaxError::Expected { expected_token: "number, or top".to_string(), found: token })?
+                            }
+                        }
+                        _ => {}
                     }
                     if let Some(value) = state.stack.pop() {
                         state.stack[pointer] = value
@@ -557,14 +575,32 @@ fn run_func(
                     })?
                 }
                 let peeked = tokens.peek();
-                if let Plus = peeked.token_type {
-                    tokens.next();
-                    token = tokens.next();
-                    if let Number(num) = token.token_type {
-                        pointer += num.parse::<usize>().unwrap()
-                    } else {
-                        return Err(SyntaxError::Expected { expected_token: "number".to_string(), found: token })?
+                match peeked.token_type {
+                    Plus => {
+                        tokens.next();
+                        token = tokens.next();
+                        match &token.token_type {
+                            Number(num) => pointer += num.parse::<usize>().unwrap(),
+                            Word(Top) => {
+                                let top_of_stack = state.stack[state.stack.len() - 1].as_usize();
+                                pointer += top_of_stack
+                            }
+                            _ => return Err(SyntaxError::Expected { expected_token: "number, or top".to_string(), found: token })?
+                        }
                     }
+                    Minus => {
+                        tokens.next();
+                        token = tokens.next();
+                        match &token.token_type {
+                            Number(num) => pointer -= num.parse::<usize>().unwrap(),
+                            Word(Top) => {
+                                let top_of_stack = state.stack[state.stack.len() - 1].as_usize();
+                                pointer -= top_of_stack
+                            }
+                            _ => return Err(SyntaxError::Expected { expected_token: "number, or top".to_string(), found: token })?
+                        }
+                    }
+                    _ => {}
                 }
                 token = tokens.next();
                 match &token.token_type {
@@ -585,6 +621,17 @@ fn run_func(
                             } else {
                                 return Err(SemanticError::UndefinedVar { ident: token })?;
                             }
+                        } else {
+                            return Err(RuntimeError::NoValueFoundAtStackIndex {
+                                index: pointer,
+                                token: token,
+                            })?;
+                        }
+                    }
+                    Word(Top) => {
+                        if let Some(stack_value) = state.stack.get(pointer) {
+                            let top_index = state.stack.len() - 1;
+                            state.stack[top_index] = *stack_value
                         } else {
                             return Err(RuntimeError::NoValueFoundAtStackIndex {
                                 index: pointer,
@@ -735,6 +782,7 @@ fn run_func(
         tokens.index = state.function_stack.pop().unwrap()
     } else {
         // let top_of_stack = state.stack.pop().unwrap();
+        println!("variables: {:?}", state.variables);
         println!("value of stack is: {:?}", state.stack)
     }
     Ok(())
@@ -869,9 +917,12 @@ fn run_numeric_instruction(
                         }
                     }
                 },
+                Word(Top) => {
+                    state.stack.push(StackValue::I64((state.stack.len() - 1) as i64));
+                }
                 _ => {
                     return Err(SyntaxError::Expected {
-                        expected_token: "number".to_string(),
+                        expected_token: "number or top".to_string(),
                         found: token,
                     })?;
                 }

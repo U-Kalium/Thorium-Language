@@ -19,7 +19,7 @@ pub enum TokenType {
     CharLit(char),
     EOF,
     VarIdent(String),
-    Dash,
+    Minus,
     Comma,
     Plus,
 }
@@ -215,7 +215,7 @@ pub fn tokenize(content: String) -> Result<Vec<Token>, String> {
                 }
                 '-' => {
                     tokens.push(Token {
-                        token_type: TokenType::Dash,
+                        token_type: TokenType::Minus,
                         line: file_line,
                         column: column - 1
                     });
