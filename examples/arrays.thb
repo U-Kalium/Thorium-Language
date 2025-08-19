@@ -24,23 +24,20 @@ func $main:
     i64 add
     cpy %a - top top
     set %b
-    declare %c
-    i64 push 420
-    set %c
     i64 push 69
     set stack %a - 1
     get %b
     i64 push 4
     i64 eq
     cast i8
-    jpz "elseL14C5"
+    jpz "elseL13C5"
     i64 push 0
     i64 push 1
     i64 add
     cpy %a - top top
     i8 push 1
-    jmp "ifendL14C5"
-@elseL14C5
+    jmp "ifendL13C5"
+@elseL13C5
     get %b
-@ifendL14C5
+@ifendL13C5
 endfunc
