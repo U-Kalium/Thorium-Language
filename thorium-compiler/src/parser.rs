@@ -44,7 +44,7 @@ impl TypeDescription {
     fn strip_modifiers(&self) -> Self {
         TypeDescription {
             modifier: ModifierType::None,
-            _type: self._type
+            _type: self._type,
         }
     }
 }
@@ -157,6 +157,10 @@ enum Value {
 enum Condition {
     Equal,
     NotEqual,
+    LessEqual,
+    GreatEqual,
+    LessThan,
+    GreaterThan,
 }
 #[derive(Debug, Clone)]
 enum Expression {
@@ -441,19 +445,109 @@ impl Parser {
                 ),
             }
         }
+        fn parse_loop(
+            parser: &mut Parser,
+            tokens: &mut TokenIter,
+            variables: &mut HashMap<String, VariableProperties>,
+            scope_return_type: TypeDescription,
+            statement: &mut String,
+        ) {
+            fn parse_while_loop(
+                parser: &mut Parser,
+                tokens: &mut TokenIter,
+                variables: &mut HashMap<String, VariableProperties>,
+                scope_return_type: TypeDescription,
+                statement: &mut String,
+            ) {
+                let loop_token = tokens.peek().unwrap();
+                let begin_loop_label =
+                    format!("beginLoopL{}C{}", loop_token.line, loop_token.column);
+                let end_loop_label = format!("endLoopL{}C{}", loop_token.line, loop_token.column);
+                statement.push_str(&format!("@{begin_loop_label}"));
+                let expression_return =
+                    parser.parse_expression(tokens, variables, TypeDescription::bool());
+                statement.push_str(&expression_return.byte_code);
+                statement.push_str(&format!("    jpz \"{end_loop_label}\""));
+
+                let scope = parser.parse_scope(tokens, scope_return_type, variables);
+                statement.push_str(&scope);
+
+                statement.push_str(&format!("    i8 push 1"));
+                statement.push_str(&format!("    jmp \"{begin_loop_label}\""));
+                statement.push_str(&format!("@{end_loop_label}"));
+                todo!("while loop")
+            }
+            fn parse_foreach_loop(
+                parser: &mut Parser,
+                tokens: &mut TokenIter,
+                variables: &mut HashMap<String, VariableProperties>,
+                scope_return_type: TypeDescription,
+                statement: &mut String,
+            ) {
+                todo!("for each loop")
+            }
+            fn parse_for_loop(
+                parser: &mut Parser,
+                tokens: &mut TokenIter,
+                variables: &mut HashMap<String, VariableProperties>,
+                scope_return_type: TypeDescription,
+                statement: &mut String,
+            ) {
+                todo!("for loop")
+            }
+            // checking what type of loop
+            let mut peeked = tokens.peek().unwrap();
+            match peeked.token_type {
+                Ident(ident) => {
+                    // while/for loop
+                    if variables.contains_key(&ident) {
+                        tokens.next().unwrap();
+                        peeked = tokens.peek().unwrap();
+                        tokens.back();
+                        match peeked.token_type {
+                            Equal => parse_for_loop(
+                                parser,
+                                tokens,
+                                variables,
+                                scope_return_type,
+                                statement,
+                            ),
+                            _ => parse_while_loop(
+                                parser,
+                                tokens,
+                                variables,
+                                scope_return_type,
+                                statement,
+                            ),
+                        }
+                    } else {
+                        // for each loop
+                        parse_foreach_loop(parser, tokens, variables, scope_return_type, statement);
+                    }
+                }
+                True => parse_while_loop(parser, tokens, variables, scope_return_type, statement),
+                False => parse_while_loop(parser, tokens, variables, scope_return_type, statement),
+                _ => parse_for_loop(parser, tokens, variables, scope_return_type, statement),
+            }
+        }
         let mut token = tokens.peek().unwrap();
         match &token.token_type {
             Finish => {
                 tokens.next();
-                let expression = self.parse_expression(tokens, variables, scope_return_type.clone());
+                let expression =
+                    self.parse_expression(tokens, variables, scope_return_type.clone());
                 if scope_return_type != expression.expression_type {
-                    todo!("Proper Error for handeling mismatch expected {scope_return_type:?} got {:?}", expression.expression_type);
+                    todo!(
+                        "Proper Error for handeling mismatch expected {scope_return_type:?} got {:?}",
+                        expression.expression_type
+                    );
                 }
                 statement.push_str(&expression.byte_code);
             }
             Return => {
                 tokens.next();
-                let expression = self.parse_expression(tokens, variables, scope_return_type.clone());
+                let expression =
+                    self.parse_expression(tokens, variables, scope_return_type.clone());
                 if scope_return_type != expression.expression_type {
                     todo!("Proper Error for handeling scope return and expression type mismatch");
                 }
@@ -475,6 +569,10 @@ impl Parser {
                     scope_return_type,
                     &mut statement,
                 );
+            }
+            Loop => {
+                tokens.next();
+                parse_loop(self, tokens, variables, scope_return_type, &mut statement)
             }
             Ident(ident) => {
                 tokens.next();
@@ -519,6 +617,52 @@ impl Parser {
         variables: &HashMap<String, VariableProperties>,
         expected_type: TypeDescription,
     ) -> ExpressionReturn {
+        fn parse_condition(
+            condition: Condition,
+            tokens: &mut TokenIter,
+            variables: &HashMap<String, VariableProperties>,
+            expected_type: TypeDescription,
+            token: Token,
+            num: &String,
+            parser: &mut Parser,
+        ) -> Expression {
+            tokens.next();
+            if let Some(token) = tokens.peek() {
+                let mut num_type = TypeDescription {
+                    modifier: ModifierType::None,
+                    _type: TypeDef::from_int(IntegerDef::I64),
+                };
+                let rhs = collect_expr(num_type.clone(), tokens, variables, parser);
+                match &rhs {
+                    Expression::Variable(ident) => {
+                        let prop = variables.get(ident).unwrap();
+                        num_type = prop.variable_type.clone()
+                    }
+                    Expression::Conditional {
+                        condition: _,
+                        lhs: _,
+                        rhs: _,
+                    } => panic!(
+                        // "Error: can not chain conditionals together like at {}:{}",
+                        // &token.line, &token.column
+                    ),
+                    _ => {}
+                }
+                return Expression::Conditional {
+                    condition: condition,
+                    lhs: Box::new(Expression::Value {
+                        expr_type: num_type,
+                        value: Value::Number(num.clone()),
+                    }),
+                    rhs: Box::new(rhs),
+                };
+            } else {
+                panic!(
+                    "Syntax Error: expected ident or literal found nothing at {}:{}",
+                    token.line, token.column
+                )
+            }
+        }
         let mut expression = ExpressionReturn {
             expression_type: TypeDescription {
                 modifier: ModifierType::None,
@@ -531,6 +675,10 @@ impl Parser {
         while match tokens.peek().unwrap().token_type {
             Ident(_) => true,
             DoubleEqual => true,
+            OpenAngleBracket => true,
+            CloseAngleBracket => true,
+            GreatEqual => true,
+            LessEqual => true,
             NumberLit(_) => true,
             OpenSquareBracket => {
                 no_of_open_square_brackets += 1;
@@ -550,6 +698,48 @@ impl Parser {
             expression_tokens.push(token);
         }
         let mut expr_tokens = TokenIter::new(expression_tokens);
+        fn collect_condition_expr(
+            condition: Condition,
+            tokens: &mut TokenIter,
+            parser: &mut Parser,
+            variables: &HashMap<String, VariableProperties>,
+            ident: &String,
+            token: Token,
+        ) -> Expression {
+            if let Some(token) = tokens.peek() {
+                // let mut num_type = "i64".to_string();
+                let mut rhs =
+                    collect_expr(TypeDescription::default_int(), tokens, variables, parser);
+                match &mut rhs {
+                    Expression::Value {
+                        expr_type,
+                        value: _value,
+                    } => {
+                        let prop = variables.get(ident).unwrap();
+                        *expr_type = prop.variable_type.clone()
+                    }
+                    Expression::Conditional {
+                        condition: _,
+                        lhs: _,
+                        rhs: _,
+                    } => panic!(
+                        // "Error: can not chain conditionals together like at {}:{}",
+                        // token.line, token.column
+                    ),
+                    _ => {}
+                }
+                return Expression::Conditional {
+                    condition: Condition::Equal,
+                    lhs: Box::new(Expression::Variable(ident.to_string())),
+                    rhs: Box::new(rhs),
+                };
+            } else {
+                panic!(
+                    "Syntax Error: expected ident or literal found nothing at {}:{}",
+                    token.line, token.column
+                )
+            }
+        }
         fn collect_expr(
             expected_type: TypeDescription,
             tokens: &mut TokenIter,
@@ -564,43 +754,59 @@ impl Parser {
                         // token needs to be an operation
                         match &token.token_type {
                             DoubleEqual => {
-                                tokens.next();
-                                if let Some(token) = tokens.peek() {
-                                    let mut num_type = TypeDescription {
-                                        modifier: ModifierType::None,
-                                        _type: TypeDef::from_int(IntegerDef::I64),
-                                    };
-                                    let rhs =
-                                        collect_expr(num_type.clone(), tokens, variables, parser);
-                                    match &rhs {
-                                        Expression::Variable(ident) => {
-                                            let prop = variables.get(ident).unwrap();
-                                            num_type = prop.variable_type.clone()
-                                        }
-                                        Expression::Conditional {
-                                            condition: _,
-                                            lhs: _,
-                                            rhs: _,
-                                        } => panic!(
-                                            // "Error: can not chain conditionals together like at {}:{}",
-                                            // &token.line, &token.column
-                                        ),
-                                        _ => {}
-                                    }
-                                    return Expression::Conditional {
-                                        condition: Condition::Equal,
-                                        lhs: Box::new(Expression::Value {
-                                            expr_type: num_type,
-                                            value: Value::Number(num.clone()),
-                                        }),
-                                        rhs: Box::new(rhs),
-                                    };
-                                } else {
-                                    panic!(
-                                        "Syntax Error: expected ident or literal found nothing at {}:{}",
-                                        token.line, token.column
-                                    )
-                                }
+                                return parse_condition(
+                                    Condition::Equal,
+                                    tokens,
+                                    variables,
+                                    expected_type,
+                                    token,
+                                    num,
+                                    parser,
+                                );
+                            }
+                            GreatEqual => {
+                                return parse_condition(
+                                    Condition::GreatEqual,
+                                    tokens,
+                                    variables,
+                                    expected_type,
+                                    token,
+                                    num,
+                                    parser,
+                                );
+                            }
+                            LessEqual => {
+                                return parse_condition(
+                                    Condition::LessEqual,
+                                    tokens,
+                                    variables,
+                                    expected_type,
+                                    token,
+                                    num,
+                                    parser,
+                                );
+                            }
+                            CloseAngleBracket => {
+                                return parse_condition(
+                                    Condition::GreaterThan,
+                                    tokens,
+                                    variables,
+                                    expected_type,
+                                    token,
+                                    num,
+                                    parser,
+                                );
+                            }
+                            OpenAngleBracket => {
+                                return parse_condition(
+                                    Condition::LessThan,
+                                    tokens,
+                                    variables,
+                                    expected_type,
+                                    token,
+                                    num,
+                                    parser,
+                                );
                             }
                             CloseSquareBracket => {}
                             op => todo!("operation: {op:?} not implemented"),
@@ -624,54 +830,21 @@ impl Parser {
                     if let Some(token) = tokens.next() {
                         // token needs to be an operation
                         match &token.token_type {
-                            DoubleEqual => {
-                                // if let Some(_) = tokens.peek() {
-                                //     return Expression::Conditional {
-                                //         condition: Condition::Equal,
-                                //         lhs: Box::new(Expression::Variable(ident.to_string())),
-                                //         rhs: Box::new(collect_expr(tokens, variables))
-                                //     }
-                                // } else {
-                                //     panic!("Syntax Error: expected ident or literal found nothing at {}:{}", token.line, token.column)
-                                // }
-                                if let Some(token) = tokens.peek() {
-                                    // let mut num_type = "i64".to_string();
-                                    let mut rhs = collect_expr(
-                                        TypeDescription::default_int(),
-                                        tokens,
-                                        variables,
-                                        parser,
-                                    );
-                                    match &mut rhs {
-                                        Expression::Value {
-                                            expr_type,
-                                            value: _value,
-                                        } => {
-                                            let prop = variables.get(ident).unwrap();
-                                            *expr_type = prop.variable_type.clone()
-                                        }
-                                        Expression::Conditional {
-                                            condition: _,
-                                            lhs: _,
-                                            rhs: _,
-                                        } => panic!(
-                                            // "Error: can not chain conditionals together like at {}:{}",
-                                            // token.line, token.column
-                                        ),
-                                        _ => {}
-                                    }
-                                    return Expression::Conditional {
-                                        condition: Condition::Equal,
-                                        lhs: Box::new(Expression::Variable(ident.to_string())),
-                                        rhs: Box::new(rhs),
-                                    };
-                                } else {
-                                    panic!(
-                                        "Syntax Error: expected ident or literal found nothing at {}:{}",
-                                        token.line, token.column
-                                    )
-                                }
-                            }
+                            DoubleEqual => collect_condition_expr(
+                                Condition::Equal, tokens, parser, variables, ident, token,
+                            ),
+                            LessEqual => collect_condition_expr(
+                                Condition::LessEqual, tokens, parser, variables, ident, token,
+                            ),
+                            GreatEqual => collect_condition_expr(
+                                Condition::GreatEqual, tokens, parser, variables, ident, token,
+                            ),
+                            OpenAngleBracket => collect_condition_expr(
+                                Condition::GreaterThan, tokens, parser, variables, ident, token,
+                            ),
+                            CloseAngleBracket => collect_condition_expr(
+                                Condition::LessThan, tokens, parser, variables, ident, token,
+                            ),
                             OpenSquareBracket => {
                                 let index = collect_expr(
                                     TypeDescription::default_int(),
@@ -761,6 +934,38 @@ impl Parser {
                             if let ModifierType::None = operation_type.modifier {
                                 expr_string.push_str(&format!(
                                     "    {} eq\n",
+                                    operation_type._type.to_string()
+                                ))
+                            }
+                        }
+                        Condition::LessEqual => {
+                            if let ModifierType::None = operation_type.modifier {
+                                expr_string.push_str(&format!(
+                                    "    {} lte\n",
+                                    operation_type._type.to_string()
+                                ))
+                            }
+                        }
+                        Condition::LessThan => {
+                            if let ModifierType::None = operation_type.modifier {
+                                expr_string.push_str(&format!(
+                                    "    {} lt\n",
+                                    operation_type._type.to_string()
+                                ))
+                            }
+                        }
+                        Condition::GreatEqual => {
+                            if let ModifierType::None = operation_type.modifier {
+                                expr_string.push_str(&format!(
+                                    "    {} gte\n",
+                                    operation_type._type.to_string()
+                                ))
+                            }
+                        }
+                        Condition::GreaterThan => {
+                            if let ModifierType::None = operation_type.modifier {
+                                expr_string.push_str(&format!(
+                                    "    {} gt\n",
                                     operation_type._type.to_string()
                                 ))
                             }
@@ -885,11 +1090,19 @@ impl Parser {
 
                     match &token.token_type {
                         NumberLit(num) => {
-                            let expression = state.parse_expression(tokens, variables, variable_to_be_assign_type);
+                            let expression = state.parse_expression(
+                                tokens,
+                                variables,
+                                variable_to_be_assign_type,
+                            );
                             assignment.push_str(&expression.byte_code);
                         }
                         Ident(ident) => {
-                            let expression = state.parse_expression(tokens, variables, variable_to_be_assign_type);
+                            let expression = state.parse_expression(
+                                tokens,
+                                variables,
+                                variable_to_be_assign_type,
+                            );
                             assignment.push_str(&expression.byte_code);
                         }
                         True => {
@@ -1034,7 +1247,11 @@ impl Parser {
                     }
                     // tokens.next();
                     // _ = tokens.next().unwrap();
-                    elements.push(self.parse_expression(tokens, variables, array_type.strip_modifiers()));
+                    elements.push(self.parse_expression(
+                        tokens,
+                        variables,
+                        array_type.strip_modifiers(),
+                    ));
 
                     token = tokens.next().unwrap();
                     if let Comma = token.token_type {

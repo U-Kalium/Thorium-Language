@@ -30,14 +30,14 @@ func $main:
     i64 push 4
     i64 eq
     cast i8
-    jpz "elseL13C5"
+    jpz "elseL10C5"
     i64 push 0
     i64 push 1
     i64 add
     cpy %a - top top
     i8 push 1
-    jmp "ifendL13C5"
-@elseL13C5
+    jmp "ifendL10C5"
+@elseL10C5
     get %b
-@ifendL13C5
+@ifendL10C5
 endfunc

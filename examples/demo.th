@@ -209,9 +209,17 @@ loop i in array {
 
 }
 
-// While loop
+// While loops
 loop true {
 
+}
+
+loop is_looping {
+
+}
+
+loop 10 == 9 {
+    
 }
 
 // for loop

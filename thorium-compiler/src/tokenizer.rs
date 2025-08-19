@@ -51,6 +51,9 @@ pub enum TokenType {
     SemiColon,
     NewLine,
     Comma,
+    Loop,
+    LessEqual,
+    GreatEqual
 }
 #[derive(Debug, Clone)]
 pub struct Token {
@@ -102,6 +105,14 @@ impl TokenIter {
             self.tokens.get(self.index).cloned()
         } else {
             self.tokens.get(self.index+1).cloned()
+        }
+    }
+    pub fn back(&mut self) -> Option<Token> {
+        if self.index == 0 {
+            None
+        } else {
+            self.index -= 1;
+            self.tokens.get(self.index).cloned()
         }
     }
 }
@@ -223,6 +234,12 @@ pub fn tokanize(content: String) -> Vec<Token> {
                     line: file_line,
                     column: column - buffer.len() as u32,
                 });
+            } else if &buffer == &String::from("loop") {
+                tokens.push(Token {
+                    token_type: TokenType::Loop,
+                    line: file_line,
+                    column: column - buffer.len() as u32,
+                });
             } else {
                 tokens.push(Token {
                     token_type: TokenType::Ident(buffer.clone()),
@@ -266,20 +283,38 @@ pub fn tokanize(content: String) -> Vec<Token> {
                     content_chars.next();
                 }
                 '<' => {
-                    tokens.push(Token {
-                        token_type: TokenType::OpenAngleBracket,
-                        line: file_line,
-                        column: column - 1,
-                    });
                     content_chars.next();
+                    if *content_chars.peek().unwrap() == '=' {
+                        content_chars.next();
+                        tokens.push(Token {
+                            token_type: TokenType::LessEqual,
+                            line: file_line,
+                            column: column - 2,
+                        });
+                    } else {
+                        tokens.push(Token {
+                            token_type: TokenType::OpenAngleBracket,
+                            line: file_line,
+                            column: column - 1,
+                        });
+                    }
                 }
                 '>' => {
-                    tokens.push(Token {
-                        token_type: TokenType::CloseAngleBracket,
-                        line: file_line,
-                        column: column - 1,
-                    });
                     content_chars.next();
+                    if *content_chars.peek().unwrap() == '=' {
+                        content_chars.next();
+                        tokens.push(Token {
+                            token_type: TokenType::GreatEqual,
+                            line: file_line,
+                            column: column - 2,
+                        });
+                    } else {
+                        tokens.push(Token {
+                            token_type: TokenType::CloseAngleBracket,
+                            line: file_line,
+                            column: column - 1,
+                        });
+                    }
                 }
                 '{' => {
                     tokens.push(Token {
@@ -303,6 +338,20 @@ pub fn tokanize(content: String) -> Vec<Token> {
                         content_chars.next();
                         tokens.push(Token {
                             token_type: TokenType::DoubleEqual,
+                            line: file_line,
+                            column: column - 2,
+                        });
+                    } else if *content_chars.peek().unwrap() == '>' {
+                        content_chars.next();
+                        tokens.push(Token {
+                            token_type: TokenType::GreatEqual,
+                            line: file_line,
+                            column: column - 2,
+                        });
+                    } else if *content_chars.peek().unwrap() == '<' {
+                        content_chars.next();
+                        tokens.push(Token {
+                            token_type: TokenType::LessEqual,
                             line: file_line,
                             column: column - 2,
                         });

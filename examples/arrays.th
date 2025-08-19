@@ -5,10 +5,7 @@ fn main() i64 {
         6,
         7,
         8, 9, 10,
-    ] 
-
-    let b i64 = a[3]
-    a[0] = 69
+    ]; let b i64 = a[3]; a[0] = 69
 
     if b == 4 {
         finish a[0]
