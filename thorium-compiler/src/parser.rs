@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 
-use crate::tokenizer::TokenType::{self, *};
-use crate::tokenizer::{Number, Token, TokenIter};
+use crate::tokenizer::TokenType::*;
+use crate::tokenizer::{Token, TokenIter};
 
 struct FunctionType {
     parems: HashMap<String, String>,
@@ -77,7 +77,7 @@ impl TypeDef {
     }
     fn is_number(&self) -> bool {
         match self {
-            TypeDef::Number(number_def) => true,
+            TypeDef::Number(_) => true,
             _ => false,
         }
     }
@@ -621,13 +621,12 @@ impl Parser {
             condition: Condition,
             tokens: &mut TokenIter,
             variables: &HashMap<String, VariableProperties>,
-            expected_type: TypeDescription,
             token: Token,
             num: &String,
             parser: &mut Parser,
         ) -> Expression {
             tokens.next();
-            if let Some(token) = tokens.peek() {
+            if let Some(_token) = tokens.peek() {
                 let mut num_type = TypeDescription {
                     modifier: ModifierType::None,
                     _type: TypeDef::from_int(IntegerDef::I64),
@@ -729,7 +728,7 @@ impl Parser {
                     _ => {}
                 }
                 return Expression::Conditional {
-                    condition: Condition::Equal,
+                    condition,
                     lhs: Box::new(Expression::Variable(ident.to_string())),
                     rhs: Box::new(rhs),
                 };
@@ -758,7 +757,6 @@ impl Parser {
                                     Condition::Equal,
                                     tokens,
                                     variables,
-                                    expected_type,
                                     token,
                                     num,
                                     parser,
@@ -769,7 +767,6 @@ impl Parser {
                                     Condition::GreatEqual,
                                     tokens,
                                     variables,
-                                    expected_type,
                                     token,
                                     num,
                                     parser,
@@ -780,7 +777,6 @@ impl Parser {
                                     Condition::LessEqual,
                                     tokens,
                                     variables,
-                                    expected_type,
                                     token,
                                     num,
                                     parser,
@@ -791,7 +787,6 @@ impl Parser {
                                     Condition::GreaterThan,
                                     tokens,
                                     variables,
-                                    expected_type,
                                     token,
                                     num,
                                     parser,
@@ -802,7 +797,6 @@ impl Parser {
                                     Condition::LessThan,
                                     tokens,
                                     variables,
-                                    expected_type,
                                     token,
                                     num,
                                     parser,
@@ -852,7 +846,7 @@ impl Parser {
                                     variables,
                                     parser,
                                 );
-                                let mut next_token = tokens.next().unwrap();
+                                let next_token = tokens.next().unwrap();
                                 if let CloseSquareBracket = next_token.token_type {
                                 } else {
                                     todo!(
