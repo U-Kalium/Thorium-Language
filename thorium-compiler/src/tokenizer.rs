@@ -48,6 +48,9 @@ pub enum TokenType {
     Equal,
     Colon,
     Add,
+    Minus,
+    Star,
+    ForwardSlash,
     SemiColon,
     NewLine,
     Comma,
@@ -62,9 +65,21 @@ pub struct Token {
     pub column: u32,
 }
 
+impl Token {
+    pub fn is_bin_op(&self) -> bool {
+        match self.token_type {
+            TokenType::Add => true,
+            TokenType::Minus => true,
+            TokenType::ForwardSlash => true,
+            TokenType::Star => true,
+            _ => false
+        }
+    }
+}
+
 pub struct TokenIter {
     tokens: Vec<Token>,
-    index: usize,
+    index: i32,
     just_initialized: bool,
 }
 
@@ -79,22 +94,22 @@ impl TokenIter {
     pub fn next(&mut self) -> Option<Token> {
         if self.just_initialized {
             self.just_initialized = false;
-            self.tokens.get(self.index).cloned()
+            self.tokens.get(self.index as usize).cloned()
         } else {
             self.index += 1;
-            self.tokens.get(self.index).cloned()
+            self.tokens.get(self.index as usize).cloned()
         }
     }
     pub fn next_if(&mut self, condition: impl Fn(&Token) -> bool) -> Option<Token> {
-        if condition(&self.tokens[self.index + 1]) {
+        if condition(&self.tokens[self.index as usize + 1]) {
             self.index += 1;
-            self.tokens.get(self.index).cloned()
+            self.tokens.get(self.index as usize).cloned()
         } else {
             None
         }
     }
     pub fn current(&mut self) -> Token {
-        self.tokens[self.index].clone()
+        self.tokens[self.index as usize].clone()
     }
     pub fn reset(&mut self) {
         self.index = 0
@@ -102,18 +117,15 @@ impl TokenIter {
     pub fn peek(&mut self) -> Option<Token> {
         if self.just_initialized {
             // self.just_initialized = false;
-            self.tokens.get(self.index).cloned()
+            self.tokens.get(self.index as usize).cloned()
         } else {
-            self.tokens.get(self.index+1).cloned()
+            self.tokens.get(self.index as usize +1).cloned()
         }
     }
     pub fn back(&mut self) -> Option<Token> {
-        if self.index == 0 {
-            None
-        } else {
             self.index -= 1;
-            self.tokens.get(self.index).cloned()
-        }
+            self.tokens.get(self.index as usize).cloned()
+
     }
 }
 
@@ -374,6 +386,30 @@ pub fn tokanize(content: String) -> Vec<Token> {
                 '+' => {
                     tokens.push(Token {
                         token_type: TokenType::Add,
+                        line: file_line,
+                        column: column - 1,
+                    });
+                    content_chars.next();
+                }
+                '-' => {
+                    tokens.push(Token {
+                        token_type: TokenType::Minus,
+                        line: file_line,
+                        column: column - 1,
+                    });
+                    content_chars.next();
+                }
+                '*' => {
+                    tokens.push(Token {
+                        token_type: TokenType::Star,
+                        line: file_line,
+                        column: column - 1,
+                    });
+                    content_chars.next();
+                }
+                '/' => {
+                    tokens.push(Token {
+                        token_type: TokenType::ForwardSlash,
                         line: file_line,
                         column: column - 1,
                     });

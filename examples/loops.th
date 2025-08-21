@@ -4,7 +4,7 @@ fn main() i64 {
     
     var while_number i64 = 0;
     loop while_number <= 10 {
-        while_number = while_number + 1
+        while_number = 1 + while_number
     }
 
     finish while_number
