@@ -155,7 +155,7 @@ pub fn tokenize(content: String) -> Result<Vec<Token>, String> {
                     content_chars.next(); 
                     while content_chars
                         .peek()
-                        .is_some_and(|char| char.is_alphanumeric())
+                        .is_some_and(|char| char.is_alphanumeric() || *char == '_')
                     {
                         buffer.push(content_chars.next().unwrap());
                         column += 1;
@@ -171,7 +171,7 @@ pub fn tokenize(content: String) -> Result<Vec<Token>, String> {
                     content_chars.next();
                     while content_chars
                         .peek()
-                        .is_some_and(|char| char.is_alphanumeric())
+                        .is_some_and(|char| char.is_alphanumeric() || *char == '_')
                     {
                         buffer.push(content_chars.next().unwrap());
                         column += 1;
