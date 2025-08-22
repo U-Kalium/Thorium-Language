@@ -4,34 +4,21 @@ func $start "_start" :
     return
 
 func $main:
-    declare %numbers
-    i8 push 0
-    i8 push 1
-    i8 push 2
-    i8 push 3
-    i8 push 4
-    i8 push 5
-    i64 push 5
-    i64 push top
-    set %numbers
-    declare %for_each_total
-    i8 push 0
-    set %for_each_total
     declare %while_number
     i64 push 0
     set %while_number
-@beginLoopL6C10
+@beginLoopL4C10
     get %while_number
-    i64 push 10
+    i64 push 10000000
     i64 lte
     cast i8
-    jpz "endLoopL6C10"
-    i64 push 1
+    jpz "endLoopL4C10"
     get %while_number
+    i64 push 1
     i64 add
     set %while_number
     i8 push 1
-    jmp "beginLoopL6C10"
-@endLoopL6C10
+    jmp "beginLoopL4C10"
+@endLoopL4C10
     get %while_number
 endfunc
