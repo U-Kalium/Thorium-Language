@@ -1,7 +1,7 @@
 // use std::env;
 use std::{env, fs};
 
-use rustc_hash::FxHashMap;
+use hashbrown::HashMap;
 
 // use crate::parser::parse_tokens;
 use crate::run_byte_code::{run, MemoryErrors, RuntimeError, SemanticError, StackValue, SyntaxError};
@@ -74,7 +74,7 @@ fn main() -> Result<(), Error>{
     // println!("returned: {:?}", state.run())
 }
 
-pub fn tokenize_and_run(byte_code: String) -> Result<(Vec<StackValue>, FxHashMap<String, StackValue>), Error> {
+pub fn tokenize_and_run(byte_code: String) -> Result<(Vec<StackValue>, HashMap<String, StackValue>), Error> {
     let tokens = tokenize(byte_code).unwrap();
     run(&tokens)
 }
