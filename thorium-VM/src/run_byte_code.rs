@@ -250,66 +250,62 @@ impl MachineState {
 }
 
 struct TokenIter {
-    tokens: Vec<Token>,
+    // tokens: Vec<Token>,
     index: usize,
 }
 impl TokenIter {
-    fn next(&mut self) -> &Token {
+    fn next<'a>(&mut self, tokens: &'a Vec<Token>) -> &'a Token {
         self.index += 1;
-        &self.tokens[self.index]
+        &tokens[self.index]
     }
-    fn cloned_next(&mut self) -> Token {
-        self.index += 1;
-        self.tokens[self.index].clone()
-    }
-    fn current(&mut self) -> &Token {
-        &self.tokens[self.index]
+    fn current<'a>(&mut self, tokens: &'a Vec<Token>) -> &'a Token {
+        &tokens[self.index]
     }
     fn reset(&mut self) {
         self.index = 0
     }
-    fn peek(&self) -> &Token {
-        &self.tokens[self.index + 1]
+    fn peek<'a>(&mut self, tokens: &'a Vec<Token>) -> &'a Token {
+        &tokens[self.index + 1]
     }
 }
 
 pub fn run(tokens: &Vec<Token>) -> Result<(Vec<StackValue>, FxHashMap<String, StackValue>), Error> {
     let mut state = MachineState::new();
     let mut token_iter = TokenIter {
-        tokens: tokens.clone(),
         index: 0,
     };
-    find_funcs(&mut token_iter, &mut state)?;
+    find_funcs(&mut token_iter, &mut state, tokens)?;
     state.functions.insert("printmemory".to_string(), 0);
     // state.functions.get(k)
     println!("funcs: {:?}", state.functions);
     println!("exported funcs: {:?}", state.exports);
     let start_func_index = state.exports.get("_start").unwrap().clone();
-    run_func(&mut token_iter, &mut state, start_func_index)?;
+    run_func(&mut token_iter, &mut state, start_func_index, tokens)?;
     Ok((state.stack, state.variables))
 }
 
 fn run_func(
-    tokens: &mut TokenIter,
+    tokens_iter: &mut TokenIter,
     state: &mut MachineState,
     func_index: usize,
+    tokens: &Vec<Token>
 ) -> Result<(), Error> {
-    tokens.index = func_index;
+    tokens_iter.index = func_index;
     let mut labels = FxHashMap::default();
     // finding labels
-    while tokens.peek().token_type != Word(EndFunc) {
-        let token = tokens.next();
+    while tokens_iter.peek(tokens).token_type != Word(EndFunc) {
+        let token = tokens_iter.next(tokens);
         if let LabelIdent(ident) = &token.token_type {
-            labels.insert(ident.clone(), tokens.index);
+            labels.insert(ident.clone(), tokens_iter.index);
         }
     }
-    tokens.index = func_index;
-    while tokens.peek().token_type != Word(EndFunc) {
-        let mut token = tokens.next();
+    tokens_iter.index = func_index;
+    while tokens_iter.peek(tokens).token_type != Word(EndFunc) {
+        let mut token = tokens_iter.next(tokens);
         match token.token_type {
             LabelIdent(_) => {}
             Word(Insert) => {
-                token = tokens.next();
+                token = tokens_iter.next(tokens);
                 match &token.token_type {
                     StringLit(string) => state.memory.insert(string.as_bytes())?,
                     // Number(number) => state.memory.insert(&number.parse().unwrap().to_be_bytes())?,
@@ -345,9 +341,9 @@ fn run_func(
                     }
                     CharLit(char) => {
                         let mut chars = String::from(*char);
-                        while tokens.peek().token_type == Comma {
-                            tokens.next();
-                            let char_token = tokens.next();
+                        while tokens_iter.peek(tokens).token_type == Comma {
+                            tokens_iter.next(tokens);
+                            let char_token = tokens_iter.next(tokens);
                             if let CharLit(next_char) = char_token.token_type {
                                 chars.push(next_char);
                             } else {
@@ -368,7 +364,7 @@ fn run_func(
                 };
             }
             Word(Grow) => {
-                token = tokens.next();
+                token = tokens_iter.next(tokens);
                 match &token.token_type {
                     Number(number) => {
                         if let Ok(integer) = number.parse::<usize>() {
@@ -389,12 +385,10 @@ fn run_func(
                 }
             }
             Word(Remove) => {
-                token = tokens.next();
-                let binding = &token.clone();
-                token = binding;
+                token = tokens_iter.next(tokens);
                 match &token.token_type {
                     Number(pointer) => {
-                        let next_token = tokens.next();
+                        let next_token = tokens_iter.next(tokens);
                         match &next_token.token_type {
                             Number(size) => {
                                 let parsed_pointer;
@@ -434,7 +428,7 @@ fn run_func(
                 }
             }
             Word(Pop) => {
-                token = tokens.next();
+                token = tokens_iter.next(tokens);
                 match &token.token_type {
                     Word(Mem) => {
                         if let Some(value) = state.stack.pop() {
@@ -444,17 +438,17 @@ fn run_func(
                     _ => todo!("add ability to pop into variables"),
                 }
             }
-            Word(Call) => run_call(tokens, state)?,
+            Word(Call) => run_call(tokens_iter, state, tokens)?,
             Word(Return) => {
                 break;
             }
             Word(Jmp) => {
-                token = tokens.next();
+                token = tokens_iter.next(tokens);
                 if let StringLit(ref ident) = token.token_type {
                     if let Some(index) = labels.get(ident) {
                         let value = state.stack.pop().unwrap();
                         if !value.is_zero() {
-                            tokens.index = *index
+                            tokens_iter.index = *index
                         }
                     } else {
                         return Err(SyntaxError::Expected {
@@ -470,12 +464,12 @@ fn run_func(
                 }
             }
             Word(Jpz) => {
-                token = tokens.next();
+                token = tokens_iter.next(tokens);
                 if let StringLit(ref ident) = token.token_type {
                     if let Some(index) = labels.get(ident) {
                         let value = state.stack.pop().unwrap();
                         if value.is_zero() {
-                            tokens.index = *index
+                            tokens_iter.index = *index
                         }
                     } else {
                         return Err(SemanticError::UndefindLabel { ident: token.clone() })?;
@@ -487,22 +481,20 @@ fn run_func(
                     })?;
                 }
             }
-            Word(I128) => run_numeric_instruction(tokens, state, NumericType::I128)?,
-            Word(I64) => run_numeric_instruction(tokens, state, NumericType::I64)?,
-            Word(I32) => run_numeric_instruction(tokens, state, NumericType::I32)?,
-            Word(I16) => run_numeric_instruction(tokens, state, NumericType::I16)?,
-            Word(I8) => run_numeric_instruction(tokens, state, NumericType::I8)?,
-            Word(F64) => run_numeric_instruction(tokens, state, NumericType::F64)?,
-            Word(F32) => run_numeric_instruction(tokens, state, NumericType::F32)?,
-            Word(Declare) => run_variable_decleration(tokens, state)?,
+            Word(I128) => run_numeric_instruction(tokens_iter, state, NumericType::I128, tokens)?,
+            Word(I64) => run_numeric_instruction(tokens_iter, state, NumericType::I64, tokens)?,
+            Word(I32) => run_numeric_instruction(tokens_iter, state, NumericType::I32, tokens)?,
+            Word(I16) => run_numeric_instruction(tokens_iter, state, NumericType::I16, tokens)?,
+            Word(I8) => run_numeric_instruction(tokens_iter, state, NumericType::I8, tokens)?,
+            Word(F64) => run_numeric_instruction(tokens_iter, state, NumericType::F64, tokens)?,
+            Word(F32) => run_numeric_instruction(tokens_iter, state, NumericType::F32, tokens)?,
+            Word(Declare) => run_variable_decleration(tokens_iter, state, tokens)?,
             Word(Set) => {
-                let peeked = tokens.peek();
+                let peeked = tokens_iter.peek(tokens);
                 if let Word(Stack) = peeked.token_type {
-                    tokens.next();
+                    tokens_iter.next(tokens);
 
-                    token = tokens.next();
-                    let binding = &token.clone();
-                    token = binding;
+                    token = tokens_iter.next(tokens);
                     let mut pointer: usize;
                     match &token.token_type {
                         Number(num) => pointer = num.parse().unwrap(),
@@ -523,11 +515,11 @@ fn run_func(
                             found: token.clone(),
                         })?
                     }
-                    let peeked = tokens.peek();
+                    let peeked = tokens_iter.peek(tokens);
                     match peeked.token_type {
                         Plus => {
-                            tokens.next();
-                            token = tokens.next();
+                            tokens_iter.next(tokens);
+                            token = tokens_iter.next(tokens);
                             match &token.token_type {
                                 Number(num) => pointer += num.parse::<usize>().unwrap(),
                                 Word(Top) => {
@@ -538,8 +530,8 @@ fn run_func(
                             }
                         }
                         Minus => {
-                            tokens.next();
-                            token = tokens.next();
+                            tokens_iter.next(tokens);
+                            token = tokens_iter.next(tokens);
                             match &token.token_type {
                                 Number(num) => pointer -= num.parse::<usize>().unwrap(),
                                 Word(Top) => {
@@ -557,12 +549,12 @@ fn run_func(
                         return Err(RuntimeError::PoppingEmptyStack { popped_into: token.clone() })?;
                     }
                 } else {
-                    run_variable_set(tokens, state)?
+                    run_variable_set(tokens_iter, state, tokens)?
                 }
             },
-            Word(Get) => run_variable_get(tokens, state)?,
+            Word(Get) => run_variable_get(tokens_iter, state, tokens)?,
             Word(Cpy) => {
-                token = tokens.next();
+                token = tokens_iter.next(tokens);
                 let mut pointer: usize;
                 match &token.token_type {
                     Number(num) => pointer = num.parse().unwrap(),
@@ -583,11 +575,11 @@ fn run_func(
                         found: token.clone(),
                     })?
                 }
-                let peeked = tokens.peek();
+                let peeked = tokens_iter.peek(tokens);
                 match peeked.token_type {
                     Plus => {
-                        tokens.next();
-                        token = tokens.next();
+                        tokens_iter.next(tokens);
+                        token = tokens_iter.next(tokens);
                         match &token.token_type {
                             Number(num) => pointer += num.parse::<usize>().unwrap(),
                             Word(Top) => {
@@ -598,8 +590,8 @@ fn run_func(
                         }
                     }
                     Minus => {
-                        tokens.next();
-                        token = tokens.next();
+                        tokens_iter.next(tokens);
+                        token = tokens_iter.next(tokens);
                         match &token.token_type {
                             Number(num) => pointer -= num.parse::<usize>().unwrap(),
                             Word(Top) => {
@@ -611,7 +603,7 @@ fn run_func(
                     }
                     _ => {}
                 }
-                token = tokens.next();
+                token = tokens_iter.next(tokens);
                 match &token.token_type {
                     Word(Mem) => {
                         if let Some(value) = state.stack.get(pointer) {
@@ -657,7 +649,7 @@ fn run_func(
                 }
             }
             Word(Cast) => {
-                token = tokens.next();
+                token = tokens_iter.next(tokens);
                 match token.token_type {
                     Word(I32) => {
                         if let Some(value) = state.stack.pop() {
@@ -788,7 +780,7 @@ fn run_func(
         }
     }
     if state.function_stack.len() >= 1 {
-        tokens.index = state.function_stack.pop().unwrap()
+        tokens_iter.index = state.function_stack.pop().unwrap()
     } else {
         // let top_of_stack = state.stack.pop().unwrap();
         println!("variables: {:?}", state.variables);
@@ -808,12 +800,12 @@ enum NumericType {
     F64,
 }
 
-fn run_variable_decleration(tokens: &mut TokenIter, state: &mut MachineState) -> Result<(), Error> {
-    while match tokens.peek().token_type {
+fn run_variable_decleration(tokens_iter: &mut TokenIter, state: &mut MachineState, tokens: &Vec<Token>) -> Result<(), Error> {
+    while match tokens_iter.peek(tokens).token_type {
         VarIdent(_) => true,
         _ => false,
     } {
-        let token = tokens.next();
+        let token = tokens_iter.next(tokens);
         if let VarIdent(ident) = &token.token_type {
             state.variables.insert(ident.clone(), StackValue::Null);
         } else {
@@ -826,8 +818,8 @@ fn run_variable_decleration(tokens: &mut TokenIter, state: &mut MachineState) ->
     Ok(())
 }
 
-fn run_variable_set(tokens: &mut TokenIter, state: &mut MachineState) -> Result<(), Error> {
-    let token = tokens.next();
+fn run_variable_set(tokens_iter: &mut TokenIter, state: &mut MachineState, tokens: &Vec<Token>) -> Result<(), Error> {
+    let token = tokens_iter.next(tokens);
     match &token.token_type {
         VarIdent(ident) => {
             if let Some(value) = state.stack.pop() {
@@ -848,8 +840,8 @@ fn run_variable_set(tokens: &mut TokenIter, state: &mut MachineState) -> Result<
     }
 }
 
-fn run_variable_get(tokens: &mut TokenIter, state: &mut MachineState) -> Result<(), Error> {
-    let token = tokens.next();
+fn run_variable_get(tokens_iter: &mut TokenIter, state: &mut MachineState, tokens: &Vec<Token>) -> Result<(), Error> {
+    let token = tokens_iter.next(tokens);
     match &token.token_type {
         VarIdent(ident) => {
             if let Some(var) = state.variables.get(ident) {
@@ -864,16 +856,15 @@ fn run_variable_get(tokens: &mut TokenIter, state: &mut MachineState) -> Result<
 }
 
 fn run_numeric_instruction(
-    tokens: &mut TokenIter,
+    token_iter: &mut TokenIter,
     state: &mut MachineState,
     num_type: NumericType,
+    tokens: &Vec<Token>,
 ) -> Result<(), Error> {
-    let mut token = tokens.next();
+    let mut token = token_iter.next( tokens);
     match token.token_type {
         Word(Push) => {
-            token = tokens.next();
-            let binding = &token.clone();
-            token = binding;
+            token = token_iter.next(tokens);
             match &token.token_type {
                 Number(num) => match num_type {
                     NumericType::I128 => state.stack.push(StackValue::I128(num.parse().unwrap())),
@@ -882,16 +873,14 @@ fn run_numeric_instruction(
                     NumericType::I16 => state.stack.push(StackValue::I16(num.parse().unwrap())),
                     NumericType::I8 => state.stack.push(StackValue::I8(num.parse().unwrap())),
                     NumericType::F32 => {
-                        let binding = tokens.next();
-                        let binding = &binding.clone();
-                        token = binding;
+                        token = token_iter.next(tokens);
                         if token.token_type != FullStop {
                             return Err(SyntaxError::Expected {
                                 expected_token: "full stop for float".to_string(),
                                 found: token.clone(),
                             })?;
                         }
-                        token = tokens.next();
+                        token = token_iter.next(tokens);
                         match &token.token_type {
                             Number(num_after_decimal) => {
                                 let float: f32 =
@@ -907,16 +896,14 @@ fn run_numeric_instruction(
                         }
                     }
                     NumericType::F64 => {
-                        let binding = tokens.next();
-                        let binding = &binding.clone();
-                        token = binding;
+                        token = token_iter.next(tokens);
                         if token.token_type != FullStop {
                             return Err(SyntaxError::Expected {
                                 expected_token: "full stop for float".to_string(),
                                 found: token.clone(),
                             })?;
                         }
-                        token = tokens.next();
+                        token = token_iter.next(tokens);
                         match &token.token_type {
                             Number(num_after_decimal) => {
                                 let float: f64 =
@@ -942,13 +929,11 @@ fn run_numeric_instruction(
                     })?;
                 }
             }
-            while match tokens.peek().token_type {
+            while match token_iter.peek(tokens).token_type {
                 Number(_) => true,
                 _ => false,
             } {
-                token = tokens.next();
-                let binding = &token.clone();
-                token = binding;
+                token = token_iter.next(tokens);
                 match &token.token_type {
                     Number(num) => match num_type {
                         NumericType::I128 => {
@@ -959,16 +944,14 @@ fn run_numeric_instruction(
                         NumericType::I16 => state.stack.push(StackValue::I16(num.parse().unwrap())),
                         NumericType::I8 => state.stack.push(StackValue::I8(num.parse().unwrap())),
                         NumericType::F32 => {
-                            let binding = tokens.next();
-                            let binding = &binding.clone();
-                            token = binding;
+                            token = token_iter.next(tokens);
                             if token.token_type != FullStop {
                                 return Err(SyntaxError::Expected {
                                     expected_token: "full stop for float".to_string(),
                                     found: token.clone(),
                                 })?;
                             }
-                            token = tokens.next();
+                            token = token_iter.next(tokens);
                             match &token.token_type {
                                 Number(num_after_decimal) => {
                                     let float: f32 =
@@ -984,16 +967,14 @@ fn run_numeric_instruction(
                             }
                         }
                         NumericType::F64 => {
-                            let binding = tokens.next();
-                            let binding = &binding.clone();
-                            token = binding;
+                            token = token_iter.next(tokens);
                             if token.token_type != FullStop {
                                 return Err(SyntaxError::Expected {
                                     expected_token: "full stop for float".to_string(),
                                     found: token.clone(),
                                 })?;
                             }
-                            token = tokens.next();
+                            token = token_iter.next(tokens);
                             match &token.token_type {
                                 Number(num_after_decimal) => {
                                     let float: f64 =
@@ -1031,7 +1012,7 @@ fn run_numeric_instruction(
         Word(Max) => process_numerical_op(state, num_type, NumericeOp::Max),
         Word(Min) => process_numerical_op(state, num_type, NumericeOp::Min),
         Word(Cpy) => {
-            token = tokens.next();
+            token = token_iter.next(tokens);
             let pointer: usize;
             if let Number(num) = &token.token_type {
                 pointer = num.parse().unwrap()
@@ -1083,19 +1064,19 @@ fn run_numeric_instruction(
     }
 }
 
-fn run_call(tokens: &mut TokenIter, state: &mut MachineState) -> Result<(), Error> {
-    let token = tokens.next().clone();
-    let call_site_index = tokens.index;
+fn run_call(tokens_iter: &mut TokenIter, state: &mut MachineState, tokens: &Vec<Token>) -> Result<(), Error> {
+    let token = tokens_iter.next(tokens);
+    let call_site_index = tokens_iter.index;
     match token.token_type {
         FuncIdent(ref ident) => {
             if let Some(func_index) = state.functions.get(ident) {
-                tokens.index = call_site_index;
+                tokens_iter.index = call_site_index;
                 state.function_stack.push(call_site_index);
                 if *ident == "printmemory".to_string() {
                     print_memory(state);
                     Ok(())
                 } else {
-                    run_func(tokens, state, *func_index)
+                    run_func(tokens_iter, state, *func_index, tokens)
                 }
             } else {
                 return Err(SemanticError::UndefinedFunc { ident: token.clone() })?;
@@ -1113,15 +1094,15 @@ fn print_memory(state: &mut MachineState) {
     println!("Memory: {:?}", state.memory)
 }
 
-fn find_funcs(tokens: &mut TokenIter, state: &mut MachineState) -> Result<(), Error> {
-    let mut token = tokens.current().clone();
+fn find_funcs(tokens_iter: &mut TokenIter, state: &mut MachineState, tokens: &Vec<Token>) -> Result<(), Error> {
+    let mut token = tokens_iter.current(tokens);
     match token.token_type {
         Word(Func) => {
             let func_index;
             let mut func_export: Option<String> = None;
             let func_ident;
-            token = tokens.cloned_next();
-            match token.token_type {
+            token = &tokens_iter.next(tokens);
+            match &token.token_type {
                 FuncIdent(ident) => func_ident = ident,
                 // wrong_token => return Err(format!("Syntax Error: Expected function ident found {wrong_token:?} at {}:{}", token.line, token.column))
                 _ => {
@@ -1131,13 +1112,13 @@ fn find_funcs(tokens: &mut TokenIter, state: &mut MachineState) -> Result<(), Er
                     }));
                 }
             }
-            token = tokens.cloned_next();
+            token = &tokens_iter.next(tokens);
             match &token.token_type {
                 StringLit(lit) => {
                     func_export = Some(lit.to_string());
-                    token = tokens.cloned_next();
+                    token = &tokens_iter.next(tokens);
                     match token.token_type {
-                        Colon => func_index = tokens.index,
+                        Colon => func_index = tokens_iter.index,
                         _ => {
                             return Err(SyntaxError::Expected {
                                 expected_token: "collon or export".to_string(),
@@ -1146,7 +1127,7 @@ fn find_funcs(tokens: &mut TokenIter, state: &mut MachineState) -> Result<(), Er
                         }
                     }
                 }
-                Colon => func_index = tokens.index,
+                Colon => func_index = tokens_iter.index,
                 _ => {
                     return Err(SyntaxError::Expected {
                         expected_token: "collon or export".to_string(),
@@ -1154,19 +1135,19 @@ fn find_funcs(tokens: &mut TokenIter, state: &mut MachineState) -> Result<(), Er
                     })?;
                 }
             }
-            state.functions.insert(func_ident.clone(), func_index);
+            state.functions.insert(func_ident.to_string(), func_index);
             if let Some(export) = func_export {
                 state.exports.insert(export, func_index);
             }
         }
         EOF => {
-            tokens.reset();
+            tokens_iter.reset();
             return Ok(());
         }
         _ => {}
     }
-    tokens.next();
-    find_funcs(tokens, state)?;
+    tokens_iter.next(tokens);
+    find_funcs(tokens_iter, state, tokens)?;
     Ok(())
 }
 
