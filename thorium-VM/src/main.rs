@@ -59,9 +59,9 @@ fn main() -> Result<(), Error>{
     let file_content =
         fs::read_to_string(file_name).expect("Should have been able to read the file");
 
-    let tokens = tokenize(file_content).unwrap();
+    let mut tokens = tokenize(file_content).unwrap();
 
-    match run(&tokens) {
+    match run(&mut tokens) {
         Ok(_) => Ok(()),
         Err(err) => Err(err),
     }
@@ -75,6 +75,6 @@ fn main() -> Result<(), Error>{
 }
 
 pub fn tokenize_and_run(byte_code: String) -> Result<(Vec<StackValue>, HashMap<String, StackValue>), Error> {
-    let tokens = tokenize(byte_code).unwrap();
-    run(&tokens)
+    let mut tokens = tokenize(byte_code).unwrap();
+    run(&mut tokens)
 }

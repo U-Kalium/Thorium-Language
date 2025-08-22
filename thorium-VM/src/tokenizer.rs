@@ -12,6 +12,7 @@ pub enum TokenType {
     Word(WordToken),
     FuncIdent(String),
     LabelIdent(String),
+    TokenIndex(usize),
     Colon,
     FullStop,
     Number(String),

@@ -269,14 +269,13 @@ impl TokenIter {
     }
 }
 
-pub fn run(tokens: &Vec<Token>) -> Result<(Vec<StackValue>, HashMap<String, StackValue>), Error> {
+pub fn run(tokens: &mut Vec<Token>) -> Result<(Vec<StackValue>, HashMap<String, StackValue>), Error> {
     let mut state = MachineState::new();
     let mut token_iter = TokenIter {
         index: 0,
     };
     find_funcs(&mut token_iter, &mut state, tokens)?;
     state.functions.insert("printmemory".to_string(), 0);
-    // state.functions.get(k)
     println!("funcs: {:?}", state.functions);
     println!("exported funcs: {:?}", state.exports);
     let start_func_index = state.exports.get("_start").unwrap().clone();
@@ -288,7 +287,7 @@ fn run_func(
     tokens_iter: &mut TokenIter,
     state: &mut MachineState,
     func_index: usize,
-    tokens: &Vec<Token>
+    tokens: &mut Vec<Token>
 ) -> Result<(), Error> {
     tokens_iter.index = func_index;
     let mut labels = HashMap::new();
@@ -444,41 +443,72 @@ fn run_func(
             }
             Word(Jmp) => {
                 token = tokens_iter.next(tokens);
-                if let StringLit(ref ident) = token.token_type {
-                    if let Some(index) = labels.get(ident) {
+                match token.token_type {
+                    StringLit(ref ident) => {
+                        if let Some(index) = labels.get(ident) {
+                            let value = state.stack.pop().unwrap();
+                            if !value.is_zero() {
+                                tokens_iter.index = *index
+                            }
+                            tokens[tokens_iter.index] = Token {
+                                token_type: TokenIndex(*index),
+                                line: token.line,
+                                column: token.column
+                            }
+                        } else {
+                            return Err(SyntaxError::Expected {
+                                expected_token: "string_lit".to_string(),
+                                found: token.clone(),
+                            })?;
+                        }
+                    }
+                    TokenIndex(index) => {
                         let value = state.stack.pop().unwrap();
                         if !value.is_zero() {
-                            tokens_iter.index = *index
+                            tokens_iter.index = index
                         }
-                    } else {
+                    }
+                    _ => {
                         return Err(SyntaxError::Expected {
                             expected_token: "string_lit".to_string(),
                             found: token.clone(),
                         })?;
                     }
-                } else {
-                    return Err(SyntaxError::Expected {
-                        expected_token: "string_lit".to_string(),
-                        found: token.clone(),
-                    })?;
                 }
             }
             Word(Jpz) => {
                 token = tokens_iter.next(tokens);
-                if let StringLit(ref ident) = token.token_type {
-                    if let Some(index) = labels.get(ident) {
+                match token.token_type {
+                    StringLit(ref ident) => {
+                        if let Some(index) = labels.get(ident) {
+                            let value = state.stack.pop().unwrap();
+                            if value.is_zero() {
+                                tokens_iter.index = *index
+                            }
+                            tokens[tokens_iter.index] = Token {
+                                token_type: TokenIndex(*index),
+                                line: token.line,
+                                column: token.column
+                            }
+                        } else {
+                            return Err(SyntaxError::Expected {
+                                expected_token: "string_lit".to_string(),
+                                found: token.clone(),
+                            })?;
+                        }
+                    }
+                    TokenIndex(index) => {
                         let value = state.stack.pop().unwrap();
                         if value.is_zero() {
-                            tokens_iter.index = *index
+                            tokens_iter.index = index
                         }
-                    } else {
-                        return Err(SemanticError::UndefindLabel { ident: token.clone() })?;
                     }
-                } else {
-                    return Err(SyntaxError::Expected {
-                        expected_token: "string_lit".to_string(),
-                        found: token.clone(),
-                    })?;
+                    _ => {
+                        return Err(SyntaxError::Expected {
+                            expected_token: "string_lit".to_string(),
+                            found: token.clone(),
+                        })?;
+                    }
                 }
             }
             Word(I128) => run_numeric_instruction(tokens_iter, state, NumericType::I128, tokens)?,
@@ -1064,7 +1094,7 @@ fn run_numeric_instruction(
     }
 }
 
-fn run_call(tokens_iter: &mut TokenIter, state: &mut MachineState, tokens: &Vec<Token>) -> Result<(), Error> {
+fn run_call(tokens_iter: &mut TokenIter, state: &mut MachineState, tokens: &mut Vec<Token>) -> Result<(), Error> {
     let token = tokens_iter.next(tokens);
     let call_site_index = tokens_iter.index;
     match token.token_type {
