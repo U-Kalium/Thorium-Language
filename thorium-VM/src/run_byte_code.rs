@@ -447,13 +447,13 @@ fn run_func(
                     StringLit(ref ident) => {
                         if let Some(index) = labels.get(ident) {
                             let value = state.stack.pop().unwrap();
-                            if !value.is_zero() {
-                                tokens_iter.index = *index
-                            }
                             tokens[tokens_iter.index] = Token {
                                 token_type: TokenIndex(*index),
                                 line: token.line,
                                 column: token.column
+                            };
+                            if !value.is_zero() {
+                                tokens_iter.index = *index
                             }
                         } else {
                             return Err(SyntaxError::Expected {
@@ -482,13 +482,13 @@ fn run_func(
                     StringLit(ref ident) => {
                         if let Some(index) = labels.get(ident) {
                             let value = state.stack.pop().unwrap();
-                            if value.is_zero() {
-                                tokens_iter.index = *index
-                            }
                             tokens[tokens_iter.index] = Token {
                                 token_type: TokenIndex(*index),
                                 line: token.line,
                                 column: token.column
+                            };
+                            if value.is_zero() {
+                                tokens_iter.index = *index
                             }
                         } else {
                             return Err(SyntaxError::Expected {
