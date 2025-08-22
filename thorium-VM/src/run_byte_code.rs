@@ -254,18 +254,22 @@ struct TokenIter {
     index: usize,
 }
 impl TokenIter {
-    fn next(&mut self) -> Token {
+    fn next(&mut self) -> &Token {
+        self.index += 1;
+        &self.tokens[self.index]
+    }
+    fn cloned_next(&mut self) -> Token {
         self.index += 1;
         self.tokens[self.index].clone()
     }
-    fn current(&mut self) -> Token {
-        self.tokens[self.index].clone()
+    fn current(&mut self) -> &Token {
+        &self.tokens[self.index]
     }
     fn reset(&mut self) {
         self.index = 0
     }
-    fn peek(&self) -> Token {
-        self.tokens[self.index + 1].clone()
+    fn peek(&self) -> &Token {
+        &self.tokens[self.index + 1]
     }
 }
 
@@ -295,7 +299,7 @@ fn run_func(
     // finding labels
     while tokens.peek().token_type != Word(EndFunc) {
         let token = tokens.next();
-        if let LabelIdent(ident) = token.token_type {
+        if let LabelIdent(ident) = &token.token_type {
             labels.insert(ident.clone(), tokens.index);
         }
     }
@@ -349,7 +353,7 @@ fn run_func(
                             } else {
                                 return Err(SyntaxError::Expected {
                                     expected_token: "char_lit".to_string(),
-                                    found: char_token,
+                                    found: char_token.clone(),
                                 })?;
                             }
                         }
@@ -358,7 +362,7 @@ fn run_func(
                     _ => {
                         return Err(SyntaxError::Expected {
                             expected_token: "number, string_lit of list of chars".to_string(),
-                            found: token,
+                            found: token.clone(),
                         })?;
                     }
                 };
@@ -372,20 +376,22 @@ fn run_func(
                         } else {
                             return Err(SyntaxError::Expected {
                                 expected_token: "integer".to_string(),
-                                found: token,
+                                found: token.clone(),
                             })?;
                         }
                     }
                     _ => {
                         return Err(SyntaxError::Expected {
                             expected_token: "number".to_string(),
-                            found: token,
+                            found: token.clone(),
                         })?;
                     }
                 }
             }
             Word(Remove) => {
                 token = tokens.next();
+                let binding = &token.clone();
+                token = binding;
                 match &token.token_type {
                     Number(pointer) => {
                         let next_token = tokens.next();
@@ -398,7 +404,7 @@ fn run_func(
                                 } else {
                                     return Err(SyntaxError::Expected {
                                         expected_token: "integer".to_string(),
-                                        found: token,
+                                        found: token.clone(),
                                     })?;
                                 }
                                 if let Ok(integer) = size.parse::<usize>() {
@@ -406,7 +412,7 @@ fn run_func(
                                 } else {
                                     return Err(SyntaxError::Expected {
                                         expected_token: "integer".to_string(),
-                                        found: token,
+                                        found: token.clone(),
                                     })?;
                                 }
                                 state.memory.remove(parsed_pointer, parsed_size);
@@ -414,7 +420,7 @@ fn run_func(
                             _ => {
                                 return Err(SyntaxError::Expected {
                                     expected_token: "number".to_string(),
-                                    found: token,
+                                    found: token.clone(),
                                 })?;
                             }
                         }
@@ -422,7 +428,7 @@ fn run_func(
                     _ => {
                         return Err(SyntaxError::Expected {
                             expected_token: "number".to_string(),
-                            found: token,
+                            found: token.clone(),
                         })?;
                     }
                 }
@@ -453,13 +459,13 @@ fn run_func(
                     } else {
                         return Err(SyntaxError::Expected {
                             expected_token: "string_lit".to_string(),
-                            found: token,
+                            found: token.clone(),
                         })?;
                     }
                 } else {
                     return Err(SyntaxError::Expected {
                         expected_token: "string_lit".to_string(),
-                        found: token,
+                        found: token.clone(),
                     })?;
                 }
             }
@@ -472,12 +478,12 @@ fn run_func(
                             tokens.index = *index
                         }
                     } else {
-                        return Err(SemanticError::UndefindLabel { ident: token })?;
+                        return Err(SemanticError::UndefindLabel { ident: token.clone() })?;
                     }
                 } else {
                     return Err(SyntaxError::Expected {
                         expected_token: "string_lit".to_string(),
-                        found: token,
+                        found: token.clone(),
                     })?;
                 }
             }
@@ -493,25 +499,28 @@ fn run_func(
                 let peeked = tokens.peek();
                 if let Word(Stack) = peeked.token_type {
                     tokens.next();
+
                     token = tokens.next();
+                    let binding = &token.clone();
+                    token = binding;
                     let mut pointer: usize;
                     match &token.token_type {
                         Number(num) => pointer = num.parse().unwrap(),
                         VarIdent(ident) => {
                             if let Some(value) = state.variables.get(ident) {
                                 match value {
-                                    StackValue::F32(_) => return Err(RuntimeError::TriedIndexingWithFloat { token })?,
-                                    StackValue::F64(_) => return Err(RuntimeError::TriedIndexingWithFloat { token: token })?, 
+                                    StackValue::F32(_) => return Err(RuntimeError::TriedIndexingWithFloat { token: token.clone() })?,
+                                    StackValue::F64(_) => return Err(RuntimeError::TriedIndexingWithFloat { token: token.clone() })?, 
                                     value => pointer = value.as_usize()
                                 }
                             } else {
-                                return Err(SemanticError::UndefinedVar { ident: token })?;
+                                return Err(SemanticError::UndefinedVar { ident: token.clone() })?;
                             }
                         }
                         Word(Top) => pointer = state.stack.len() - 1,
                         _ => return Err(SyntaxError::Expected {
                             expected_token: "number for pointer".to_string(),
-                            found: token,
+                            found: token.clone(),
                         })?
                     }
                     let peeked = tokens.peek();
@@ -525,7 +534,7 @@ fn run_func(
                                     let top_of_stack = state.stack[state.stack.len() - 1].as_usize();
                                     pointer += top_of_stack
                                 }
-                                _ => return Err(SyntaxError::Expected { expected_token: "number, or top".to_string(), found: token })?
+                                _ => return Err(SyntaxError::Expected { expected_token: "number, or top".to_string(), found: token.clone() })?
                             }
                         }
                         Minus => {
@@ -537,7 +546,7 @@ fn run_func(
                                     let top_of_stack = state.stack[state.stack.len() - 1].as_usize();
                                     pointer -= top_of_stack
                                 }
-                                _ => return Err(SyntaxError::Expected { expected_token: "number, or top".to_string(), found: token })?
+                                _ => return Err(SyntaxError::Expected { expected_token: "number, or top".to_string(), found: token.clone() })?
                             }
                         }
                         _ => {}
@@ -545,7 +554,7 @@ fn run_func(
                     if let Some(value) = state.stack.pop() {
                         state.stack[pointer] = value
                     } else {
-                        return Err(RuntimeError::PoppingEmptyStack { popped_into: token })?;
+                        return Err(RuntimeError::PoppingEmptyStack { popped_into: token.clone() })?;
                     }
                 } else {
                     run_variable_set(tokens, state)?
@@ -560,18 +569,18 @@ fn run_func(
                     VarIdent(ident) => {
                         if let Some(value) = state.variables.get(ident) {
                             match value {
-                                StackValue::F32(_) => return Err(RuntimeError::TriedIndexingWithFloat { token })?,
-                                StackValue::F64(_) => return Err(RuntimeError::TriedIndexingWithFloat { token: token })?, 
+                                StackValue::F32(_) => return Err(RuntimeError::TriedIndexingWithFloat { token: token.clone() })?,
+                                StackValue::F64(_) => return Err(RuntimeError::TriedIndexingWithFloat { token: token.clone() })?, 
                                 value => pointer = value.as_usize()
                             }
                         } else {
-                            return Err(SemanticError::UndefinedVar { ident: token })?;
+                            return Err(SemanticError::UndefinedVar { ident: token.clone() })?;
                         }
                     }
                     Word(Top) => pointer = state.stack.len() - 1,
                     _ => return Err(SyntaxError::Expected {
                         expected_token: "number for pointer".to_string(),
-                        found: token,
+                        found: token.clone(),
                     })?
                 }
                 let peeked = tokens.peek();
@@ -585,7 +594,7 @@ fn run_func(
                                 let top_of_stack = state.stack[state.stack.len() - 1].as_usize();
                                 pointer += top_of_stack
                             }
-                            _ => return Err(SyntaxError::Expected { expected_token: "number, or top".to_string(), found: token })?
+                            _ => return Err(SyntaxError::Expected { expected_token: "number, or top".to_string(), found: token.clone() })?
                         }
                     }
                     Minus => {
@@ -597,7 +606,7 @@ fn run_func(
                                 let top_of_stack = state.stack[state.stack.len() - 1].as_usize();
                                 pointer -= top_of_stack
                             }
-                            _ => return Err(SyntaxError::Expected { expected_token: "number, or top".to_string(), found: token })?
+                            _ => return Err(SyntaxError::Expected { expected_token: "number, or top".to_string(), found: token.clone() })?
                         }
                     }
                     _ => {}
@@ -610,7 +619,7 @@ fn run_func(
                         } else {
                             return Err(RuntimeError::NoValueFoundAtStackIndex {
                                 index: pointer,
-                                token: token,
+                                token: token.clone(),
                             })?;
                         }
                     }
@@ -619,12 +628,12 @@ fn run_func(
                             if let Some(var_value) = state.variables.get_mut(ident) {
                                 *var_value = *stack_value
                             } else {
-                                return Err(SemanticError::UndefinedVar { ident: token })?;
+                                return Err(SemanticError::UndefinedVar { ident: token.clone() })?;
                             }
                         } else {
                             return Err(RuntimeError::NoValueFoundAtStackIndex {
                                 index: pointer,
-                                token: token,
+                                token: token.clone(),
                             })?;
                         }
                     }
@@ -635,14 +644,14 @@ fn run_func(
                         } else {
                             return Err(RuntimeError::NoValueFoundAtStackIndex {
                                 index: pointer,
-                                token: token,
+                                token: token.clone(),
                             })?;
                         }
                     }
                     _ => {
                         return Err(SyntaxError::Expected {
                             expected_token: "mem or var ident".to_string(),
-                            found: token,
+                            found: token.clone(),
                         })?;
                     }
                 }
@@ -661,7 +670,7 @@ fn run_func(
                                 StackValue::I16(val) => val as i32,
                                 StackValue::I8(val) => val as i32,
                                 StackValue::Null => {
-                                    return Err(RuntimeError::CastFromNull { token: token })?;
+                                    return Err(RuntimeError::CastFromNull { token: token.clone() })?;
                                 }
                             }));
                         }
@@ -677,7 +686,7 @@ fn run_func(
                                 StackValue::I16(val) => val as i64,
                                 StackValue::I8(val) => val as i64,
                                 StackValue::Null => {
-                                    return Err(RuntimeError::CastFromNull { token: token })?;
+                                    return Err(RuntimeError::CastFromNull { token: token.clone() })?;
                                 }
                             }));
                         }
@@ -693,7 +702,7 @@ fn run_func(
                                 StackValue::I16(val) => val as i128,
                                 StackValue::I8(val) => val as i128,
                                 StackValue::Null => {
-                                    return Err(RuntimeError::CastFromNull { token: token })?;
+                                    return Err(RuntimeError::CastFromNull { token: token.clone() })?;
                                 }
                             }));
                         }
@@ -709,7 +718,7 @@ fn run_func(
                                 StackValue::I16(val) => val as i16,
                                 StackValue::I8(val) => val as i16,
                                 StackValue::Null => {
-                                    return Err(RuntimeError::CastFromNull { token: token })?;
+                                    return Err(RuntimeError::CastFromNull { token: token.clone() })?;
                                 }
                             }));
                         }
@@ -725,7 +734,7 @@ fn run_func(
                                 StackValue::I16(val) => val as i8,
                                 StackValue::I8(val) => val as i8,
                                 StackValue::Null => {
-                                    return Err(RuntimeError::CastFromNull { token: token })?;
+                                    return Err(RuntimeError::CastFromNull { token: token.clone() })?;
                                 }
                             }));
                         }
@@ -741,7 +750,7 @@ fn run_func(
                                 StackValue::I16(val) => val as f32,
                                 StackValue::I8(val) => val as f32,
                                 StackValue::Null => {
-                                    return Err(RuntimeError::CastFromNull { token: token })?;
+                                    return Err(RuntimeError::CastFromNull { token: token.clone() })?;
                                 }
                             }));
                         }
@@ -757,7 +766,7 @@ fn run_func(
                                 StackValue::I16(val) => val as f64,
                                 StackValue::I8(val) => val as f64,
                                 StackValue::Null => {
-                                    return Err(RuntimeError::CastFromNull { token: token })?;
+                                    return Err(RuntimeError::CastFromNull { token: token.clone() })?;
                                 }
                             }));
                         }
@@ -765,7 +774,7 @@ fn run_func(
                     _ => {
                         return Err(SyntaxError::Expected {
                             expected_token: "type".to_string(),
-                            found: token,
+                            found: token.clone(),
                         })?;
                     }
                 }
@@ -773,7 +782,7 @@ fn run_func(
             _ => {
                 return Err(SyntaxError::Expected {
                     expected_token: "function instruction".to_string(),
-                    found: token,
+                    found: token.clone(),
                 })?;
             }
         }
@@ -805,12 +814,12 @@ fn run_variable_decleration(tokens: &mut TokenIter, state: &mut MachineState) ->
         _ => false,
     } {
         let token = tokens.next();
-        if let VarIdent(ident) = token.token_type {
+        if let VarIdent(ident) = &token.token_type {
             state.variables.insert(ident.clone(), StackValue::Null);
         } else {
             return Err(SyntaxError::Expected {
                 expected_token: "variable ident".to_string(),
-                found: token,
+                found: token.clone(),
             })?;
         }
     }
@@ -826,15 +835,15 @@ fn run_variable_set(tokens: &mut TokenIter, state: &mut MachineState) -> Result<
                     *var = value;
                     Ok(())
                 } else {
-                    Err(SemanticError::UndefinedVar { ident: token })?
+                    Err(SemanticError::UndefinedVar { ident: token.clone() })?
                 }
             } else {
-                Err(RuntimeError::PoppingEmptyStack { popped_into: token })?
+                Err(RuntimeError::PoppingEmptyStack { popped_into: token.clone() })?
             }
         }
         _ => Err(SyntaxError::Expected {
             expected_token: "variable".to_string(),
-            found: token,
+            found: token.clone(),
         })?,
     }
 }
@@ -847,10 +856,10 @@ fn run_variable_get(tokens: &mut TokenIter, state: &mut MachineState) -> Result<
                 state.stack.push(*var);
                 Ok(())
             } else {
-                return Err(SemanticError::UndefinedVar { ident: token })?;
+                return Err(SemanticError::UndefinedVar { ident: token.clone() })?;
             }
         }
-        _ => return Err(SemanticError::UndefinedVar { ident: token })?,
+        _ => return Err(SemanticError::UndefinedVar { ident: token.clone() })?,
     }
 }
 
@@ -863,7 +872,9 @@ fn run_numeric_instruction(
     match token.token_type {
         Word(Push) => {
             token = tokens.next();
-            match token.token_type {
+            let binding = &token.clone();
+            token = binding;
+            match &token.token_type {
                 Number(num) => match num_type {
                     NumericType::I128 => state.stack.push(StackValue::I128(num.parse().unwrap())),
                     NumericType::I64 => state.stack.push(StackValue::I64(num.parse().unwrap())),
@@ -871,15 +882,17 @@ fn run_numeric_instruction(
                     NumericType::I16 => state.stack.push(StackValue::I16(num.parse().unwrap())),
                     NumericType::I8 => state.stack.push(StackValue::I8(num.parse().unwrap())),
                     NumericType::F32 => {
-                        token = tokens.next();
+                        let binding = tokens.next();
+                        let binding = &binding.clone();
+                        token = binding;
                         if token.token_type != FullStop {
                             return Err(SyntaxError::Expected {
                                 expected_token: "full stop for float".to_string(),
-                                found: token,
+                                found: token.clone(),
                             })?;
                         }
                         token = tokens.next();
-                        match token.token_type {
+                        match &token.token_type {
                             Number(num_after_decimal) => {
                                 let float: f32 =
                                     format!("{num}.{num_after_decimal}").parse().unwrap();
@@ -888,21 +901,23 @@ fn run_numeric_instruction(
                             _ => {
                                 return Err(SyntaxError::Expected {
                                     expected_token: "number".to_string(),
-                                    found: token,
+                                    found: token.clone(),
                                 })?;
                             }
                         }
                     }
                     NumericType::F64 => {
-                        token = tokens.next();
+                        let binding = tokens.next();
+                        let binding = &binding.clone();
+                        token = binding;
                         if token.token_type != FullStop {
                             return Err(SyntaxError::Expected {
                                 expected_token: "full stop for float".to_string(),
-                                found: token,
+                                found: token.clone(),
                             })?;
                         }
                         token = tokens.next();
-                        match token.token_type {
+                        match &token.token_type {
                             Number(num_after_decimal) => {
                                 let float: f64 =
                                     format!("{num}.{num_after_decimal}").parse().unwrap();
@@ -911,7 +926,7 @@ fn run_numeric_instruction(
                             _ => {
                                 return Err(SyntaxError::Expected {
                                     expected_token: "number".to_string(),
-                                    found: token,
+                                    found: token.clone(),
                                 })?;
                             }
                         }
@@ -923,7 +938,7 @@ fn run_numeric_instruction(
                 _ => {
                     return Err(SyntaxError::Expected {
                         expected_token: "number or top".to_string(),
-                        found: token,
+                        found: token.clone(),
                     })?;
                 }
             }
@@ -932,7 +947,9 @@ fn run_numeric_instruction(
                 _ => false,
             } {
                 token = tokens.next();
-                match token.token_type {
+                let binding = &token.clone();
+                token = binding;
+                match &token.token_type {
                     Number(num) => match num_type {
                         NumericType::I128 => {
                             state.stack.push(StackValue::I128(num.parse().unwrap()))
@@ -942,15 +959,17 @@ fn run_numeric_instruction(
                         NumericType::I16 => state.stack.push(StackValue::I16(num.parse().unwrap())),
                         NumericType::I8 => state.stack.push(StackValue::I8(num.parse().unwrap())),
                         NumericType::F32 => {
-                            token = tokens.next();
+                            let binding = tokens.next();
+                            let binding = &binding.clone();
+                            token = binding;
                             if token.token_type != FullStop {
                                 return Err(SyntaxError::Expected {
                                     expected_token: "full stop for float".to_string(),
-                                    found: token,
+                                    found: token.clone(),
                                 })?;
                             }
                             token = tokens.next();
-                            match token.token_type {
+                            match &token.token_type {
                                 Number(num_after_decimal) => {
                                     let float: f32 =
                                         format!("{num}.{num_after_decimal}").parse().unwrap();
@@ -959,21 +978,23 @@ fn run_numeric_instruction(
                                 _ => {
                                     return Err(SyntaxError::Expected {
                                         expected_token: "number".to_string(),
-                                        found: token,
+                                        found: token.clone(),
                                     })?;
                                 }
                             }
                         }
                         NumericType::F64 => {
-                            token = tokens.next();
+                            let binding = tokens.next();
+                            let binding = &binding.clone();
+                            token = binding;
                             if token.token_type != FullStop {
                                 return Err(SyntaxError::Expected {
                                     expected_token: "full stop for float".to_string(),
-                                    found: token,
+                                    found: token.clone(),
                                 })?;
                             }
                             token = tokens.next();
-                            match token.token_type {
+                            match &token.token_type {
                                 Number(num_after_decimal) => {
                                     let float: f64 =
                                         format!("{num}.{num_after_decimal}").parse().unwrap();
@@ -982,7 +1003,7 @@ fn run_numeric_instruction(
                                 _ => {
                                     return Err(SyntaxError::Expected {
                                         expected_token: "number".to_string(),
-                                        found: token,
+                                        found: token.clone(),
                                     })?;
                                 }
                             }
@@ -1012,10 +1033,10 @@ fn run_numeric_instruction(
         Word(Cpy) => {
             token = tokens.next();
             let pointer: usize;
-            if let Number(num) = token.token_type {
+            if let Number(num) = &token.token_type {
                 pointer = num.parse().unwrap()
             } else {
-                return Err(SyntaxError::Expected { expected_token: "number".to_string(), found: token })?;
+                return Err(SyntaxError::Expected { expected_token: "number".to_string(), found: token.clone() })?;
             }
             match num_type {
                 NumericType::I128 => {
@@ -1057,13 +1078,13 @@ fn run_numeric_instruction(
         }
         _ => Err(SyntaxError::Expected {
             expected_token: "numeric operation".to_string(),
-            found: token,
+            found: token.clone(),
         })?,
     }
 }
 
 fn run_call(tokens: &mut TokenIter, state: &mut MachineState) -> Result<(), Error> {
-    let token = tokens.next();
+    let token = tokens.next().clone();
     let call_site_index = tokens.index;
     match token.token_type {
         FuncIdent(ref ident) => {
@@ -1077,13 +1098,13 @@ fn run_call(tokens: &mut TokenIter, state: &mut MachineState) -> Result<(), Erro
                     run_func(tokens, state, *func_index)
                 }
             } else {
-                return Err(SemanticError::UndefinedFunc { ident: token })?;
+                return Err(SemanticError::UndefinedFunc { ident: token.clone() })?;
             }
         }
         _ => {
             return Err(SyntaxError::Expected {
                 expected_token: "function ident".to_string(),
-                found: token,
+                found: token.clone(),
             })?;
         }
     }
@@ -1093,34 +1114,34 @@ fn print_memory(state: &mut MachineState) {
 }
 
 fn find_funcs(tokens: &mut TokenIter, state: &mut MachineState) -> Result<(), Error> {
-    let mut token = tokens.current();
+    let mut token = tokens.current().clone();
     match token.token_type {
         Word(Func) => {
             let func_index;
             let mut func_export: Option<String> = None;
             let func_ident;
-            token = tokens.next();
+            token = tokens.cloned_next();
             match token.token_type {
                 FuncIdent(ident) => func_ident = ident,
                 // wrong_token => return Err(format!("Syntax Error: Expected function ident found {wrong_token:?} at {}:{}", token.line, token.column))
                 _ => {
                     return Err(Error::SyntacError(SyntaxError::Expected {
                         expected_token: "function ident".to_string(),
-                        found: token,
+                        found: token.clone(),
                     }));
                 }
             }
-            token = tokens.next();
-            match token.token_type {
+            token = tokens.cloned_next();
+            match &token.token_type {
                 StringLit(lit) => {
-                    func_export = Some(lit);
-                    token = tokens.next();
+                    func_export = Some(lit.to_string());
+                    token = tokens.cloned_next();
                     match token.token_type {
                         Colon => func_index = tokens.index,
                         _ => {
                             return Err(SyntaxError::Expected {
                                 expected_token: "collon or export".to_string(),
-                                found: token,
+                                found: token.clone(),
                             })?;
                         }
                     }
@@ -1129,7 +1150,7 @@ fn find_funcs(tokens: &mut TokenIter, state: &mut MachineState) -> Result<(), Er
                 _ => {
                     return Err(SyntaxError::Expected {
                         expected_token: "collon or export".to_string(),
-                        found: token,
+                        found: token.clone(),
                     })?;
                 }
             }
