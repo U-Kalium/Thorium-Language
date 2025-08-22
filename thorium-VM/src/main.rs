@@ -74,7 +74,7 @@ fn main() -> Result<(), Error>{
     // println!("returned: {:?}", state.run())
 }
 
-pub fn tokenize_and_run(byte_code: String) -> Result<(Vec<StackValue>, HashMap<String, StackValue>), Error> {
+pub fn tokenize_and_run(byte_code: String) -> Result<(Vec<StackValue>, HashMap<String, usize>, Vec<StackValue>), Error> {
     let mut tokens = tokenize(byte_code).unwrap();
     run(&mut tokens)
 }

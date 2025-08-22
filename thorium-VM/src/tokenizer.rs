@@ -15,7 +15,7 @@ pub enum TokenType {
     TokenIndex(usize),
     Colon,
     FullStop,
-    Number(String),
+    Number(i128),
     StringLit(String),
     CharLit(char),
     EOF,
