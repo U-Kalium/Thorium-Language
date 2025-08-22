@@ -1,5 +1,5 @@
 use core::{num, panic};
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use crate::Error;
 use crate::tokenizer::Token;
@@ -9,11 +9,11 @@ const PAGE_SIZE: usize = 8 * 64 * 1024;
 const INITIAL_PAGE_AMOUNT: usize = 1;
 
 struct MachineState {
-    functions: HashMap<String, usize>,
-    exports: HashMap<String, usize>,
+    functions: FxHashMap<String, usize>,
+    exports: FxHashMap<String, usize>,
     function_stack: Vec<usize>,
     stack: Vec<StackValue>,
-    variables: HashMap<String, StackValue>,
+    variables: FxHashMap<String, StackValue>,
     memory: Memory,
 }
 
@@ -239,11 +239,11 @@ impl StackValue {
 impl MachineState {
     fn new() -> Self {
         Self {
-            functions: HashMap::new(),
-            exports: HashMap::new(),
+            functions: FxHashMap::default(),
+            exports: FxHashMap::default(),
             function_stack: Vec::new(),
             stack: Vec::new(),
-            variables: HashMap::new(),
+            variables: FxHashMap::default(),
             memory: Memory::new(INITIAL_PAGE_AMOUNT),
         }
     }
@@ -269,7 +269,7 @@ impl TokenIter {
     }
 }
 
-pub fn run(tokens: &Vec<Token>) -> Result<(Vec<StackValue>, HashMap<String, StackValue>), Error> {
+pub fn run(tokens: &Vec<Token>) -> Result<(Vec<StackValue>, FxHashMap<String, StackValue>), Error> {
     let mut state = MachineState::new();
     let mut token_iter = TokenIter {
         tokens: tokens.clone(),
@@ -291,7 +291,7 @@ fn run_func(
     func_index: usize,
 ) -> Result<(), Error> {
     tokens.index = func_index;
-    let mut labels = HashMap::new();
+    let mut labels = FxHashMap::default();
     // finding labels
     while tokens.peek().token_type != Word(EndFunc) {
         let token = tokens.next();
