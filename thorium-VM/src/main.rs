@@ -49,8 +49,8 @@ impl From<RuntimeError> for Error {
 fn main() -> Result<(), Error>{
     let command_line_args: Vec<String> = env::args().collect();
 
-    // let file_name = &command_line_args[1];
-    let file_name = "examples/loops.thb";
+    let file_name = &command_line_args[1];
+    // let file_name = "examples/loops.thb";
     // let file_content = fs::read_to_string(command_line_args[1].clone())
     //     .expect("Should have been able to read the file");
 

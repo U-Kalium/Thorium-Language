@@ -323,8 +323,7 @@ fn run_func(
                             Word(I64) => state.memory.insert(&(*num as i64).to_be_bytes())?,
                             Word(F32) => state.memory.insert(&(*num as f32).to_be_bytes())?,
                             Word(F64) => state.memory.insert(&(*num as f64).to_be_bytes())?,
-                            _ => panic!("somehow the tokenizer had an invalid number type")
-                            
+                            _ => panic!("somehow the tokenizer had an invalid number type"),
                         }
                         // num.
                         // if let Ok(int) = num.into() {
@@ -437,11 +436,8 @@ fn run_func(
                     StringLit(ref ident) => {
                         if let Some(index) = labels.get(ident) {
                             let value = state.stack.pop().unwrap();
-                            tokens[tokens_iter.index] = Token {
-                                token_type: TokenIndex(*index),
-                                line: token.line,
-                                column: token.column,
-                            };
+                            tokens[tokens_iter.index].token_type = TokenIndex(*index);
+
                             if !value.is_zero() {
                                 tokens_iter.index = *index
                             }
@@ -472,11 +468,7 @@ fn run_func(
                     StringLit(ref ident) => {
                         if let Some(index) = labels.get(ident) {
                             let value = state.stack.pop().unwrap();
-                            tokens[tokens_iter.index] = Token {
-                                token_type: TokenIndex(*index),
-                                line: token.line,
-                                column: token.column,
-                            };
+                            tokens[tokens_iter.index].token_type = TokenIndex(*index);
                             if value.is_zero() {
                                 tokens_iter.index = *index
                             }
@@ -917,42 +909,34 @@ fn run_variable_set(
     tokens: &mut Vec<Token>,
 ) -> Result<(), Error> {
     let token = tokens_iter.next(tokens);
+    let value = state
+        .stack
+        .pop()
+        .ok_or_else(|| RuntimeError::PoppingEmptyStack {
+            popped_into: token.clone(),
+        })?;
     match &token.token_type {
         VarIdent(ident) => {
-            if let Some(value) = state.stack.pop() {
-                if let Some(index) = state.variable_map.get(ident) {
-                    tokens[tokens_iter.index] = Token {
-                        token_type: TokenIndex(*index),
-                        line: token.line,
-                        column: token.column,
-                    };
-                    state.variables[*index] = value;
-                    Ok(())
-                } else {
-                    Err(SemanticError::UndefinedVar {
-                        ident: token.clone(),
-                    })?
-                }
-            } else {
-                Err(RuntimeError::PoppingEmptyStack {
-                    popped_into: token.clone(),
-                })?
-            }
-        }
-        TokenIndex(index) => {
-            if let Some(value) = state.stack.pop() {
+            if let Some(index) = state.variable_map.get(ident) {
+                tokens[tokens_iter.index].token_type = TokenIndex(*index);
                 state.variables[*index] = value;
                 Ok(())
             } else {
-                Err(RuntimeError::PoppingEmptyStack {
-                    popped_into: token.clone(),
-                })?
+                Err(SemanticError::UndefinedVar {
+                    ident: token.clone(),
+                }
+                .into())
             }
+        }
+        TokenIndex(index) => {
+            state.variables[*index] = value;
+            Ok(())
         }
         _ => Err(SyntaxError::Expected {
             expected_token: "variable".to_string(),
             found: token.clone(),
-        })?,
+        }
+        .into()),
     }
 }
 
@@ -962,16 +946,13 @@ fn run_variable_get(
     tokens: &mut Vec<Token>,
 ) -> Result<(), Error> {
     let token = tokens_iter.next(tokens);
-    match &token.token_type {
+    let index = match &token.token_type {
         VarIdent(ident) => {
             if let Some(index) = state.variable_map.get(ident) {
-                tokens[tokens_iter.index] = Token {
-                    token_type: TokenIndex(*index),
-                    line: token.line,
-                    column: token.column,
-                };
-                state.stack.push(state.variables[*index]);
-                Ok(())
+                tokens[tokens_iter.index].token_type = TokenIndex(*index);
+                // state.stack.push(state.variables[*index]);
+                index
+                // Ok(())
             } else {
                 return Err(SemanticError::UndefinedVar {
                     ident: token.clone(),
@@ -979,15 +960,19 @@ fn run_variable_get(
             }
         }
         TokenIndex(index) => {
-            state.stack.push(state.variables[*index]);
-            Ok(())
+            // state.stack.push(state.variables[*index]);
+            index
+            // Ok(())
         }
         _ => {
             return Err(SemanticError::UndefinedVar {
                 ident: token.clone(),
             })?;
         }
-    }
+    };
+    state.stack.push(state.variables[*index]);
+
+    Ok(())
 }
 
 fn run_numeric_instruction(
@@ -999,68 +984,24 @@ fn run_numeric_instruction(
     let mut token = token_iter.next(tokens);
     match token.token_type {
         Word(Push) => {
-            while match token_iter.peek(tokens).token_type {
-                Number(_) => true,
-                _ => false,
-            } {
+            while matches!(token_iter.peek(tokens).token_type, Number(_)) {
                 token = token_iter.next(tokens);
-                match &token.token_type {
-                    Number(num) => match num_type {
-                        NumericType::I128 => {
-                            state.stack.push(StackValue::I128(*num))
-                        }
-                        NumericType::I64 => state.stack.push(StackValue::I64(*num as i64)),
-                        NumericType::I32 => state.stack.push(StackValue::I32(*num as i32)),
-                        NumericType::I16 => state.stack.push(StackValue::I16(*num as i16)),
-                        NumericType::I8 => state.stack.push(StackValue::I8(*num as i8)),
+                if let Number(num) = token.token_type {
+                    match num_type {
+                        NumericType::I128 => state.stack.push(StackValue::I128(num)),
+                        NumericType::I64 => state.stack.push(StackValue::I64(num as i64)),
+                        NumericType::I32 => state.stack.push(StackValue::I32(num as i32)),
+                        NumericType::I16 => state.stack.push(StackValue::I16(num as i16)),
+                        NumericType::I8 => state.stack.push(StackValue::I8(num as i8)),
                         NumericType::F32 => {
-                            token = token_iter.next(tokens);
-                            if token.token_type != FullStop {
-                                return Err(SyntaxError::Expected {
-                                    expected_token: "full stop for float".to_string(),
-                                    found: token.clone(),
-                                })?;
-                            }
-                            token = token_iter.next(tokens);
-                            match &token.token_type {
-                                Number(num_after_decimal) => {
-                                    let float: f32 =
-                                        format!("{num}.{num_after_decimal}").parse().unwrap();
-                                    state.stack.push(StackValue::F32(float))
-                                }
-                                _ => {
-                                    return Err(SyntaxError::Expected {
-                                        expected_token: "number".to_string(),
-                                        found: token.clone(),
-                                    })?;
-                                }
-                            }
+                            let float = parse_float32(token_iter, num, tokens)?;
+                            state.stack.push(StackValue::F32(float));
                         }
                         NumericType::F64 => {
-                            token = token_iter.next(tokens);
-                            if token.token_type != FullStop {
-                                return Err(SyntaxError::Expected {
-                                    expected_token: "full stop for float".to_string(),
-                                    found: token.clone(),
-                                })?;
-                            }
-                            token = token_iter.next(tokens);
-                            match &token.token_type {
-                                Number(num_after_decimal) => {
-                                    let float: f64 =
-                                        format!("{num}.{num_after_decimal}").parse().unwrap();
-                                    state.stack.push(StackValue::F64(float))
-                                }
-                                _ => {
-                                    return Err(SyntaxError::Expected {
-                                        expected_token: "number".to_string(),
-                                        found: token.clone(),
-                                    })?;
-                                }
-                            }
+                            let float = parse_float64(token_iter, num, tokens)?;
+                            state.stack.push(StackValue::F64(float));
                         }
-                    },
-                    _ => panic!("This should be unreachable"),
+                    }
                 }
             }
             Ok(())
@@ -1151,6 +1092,75 @@ fn run_numeric_instruction(
     }
 }
 
+fn parse_float32(
+    token_iter: &mut TokenIter,
+    whole_part: i128,
+    tokens: &Vec<Token>,
+) -> Result<f32, Error> {
+    let token = token_iter.next(tokens);
+    if matches!(token.token_type, FullStop) {
+        return Err(SyntaxError::Expected {
+            expected_token: "full stop for float".to_string(),
+            found: token.clone(),
+        }
+        .into());
+    }
+
+    let token = token_iter.next(tokens);
+    if let Number(decimal_part) = token.token_type {
+        let decimal_places = count_digits(decimal_part);
+        let divisor = 10_f32.powi(decimal_places as i32);
+        Ok(whole_part as f32 + (decimal_part as f32) / divisor)
+    } else {
+        return Err(SyntaxError::Expected {
+            expected_token: "number".to_string(),
+            found: token.clone(),
+        }
+        .into());
+    }
+}
+fn parse_float64(
+    token_iter: &mut TokenIter,
+    whole_part: i128,
+    tokens: &Vec<Token>,
+) -> Result<f64, Error> {
+    let token = token_iter.next(tokens);
+    if matches!(token.token_type, FullStop) {
+        return Err(SyntaxError::Expected {
+            expected_token: "full stop for float".to_string(),
+            found: token.clone(),
+        }
+        .into());
+    }
+
+    let token = token_iter.next(tokens);
+    if let Number(decimal_part) = token.token_type {
+        let decimal_places = count_digits(decimal_part);
+        let divisor = 10_f64.powi(decimal_places as i32);
+        Ok(whole_part as f64 + (decimal_part as f64) / divisor)
+    } else {
+        return Err(SyntaxError::Expected {
+            expected_token: "number".to_string(),
+            found: token.clone(),
+        }
+        .into());
+    }
+}
+
+fn count_digits(mut n: i128) -> u32 {
+    if n == 0 {
+        return 1;
+    }
+    let mut count = 0;
+    if n < 0 {
+        n = -n;
+    }
+    while n > 0 {
+        n /= 10;
+        count += 1;
+    }
+    count
+}
 fn run_call(
     tokens_iter: &mut TokenIter,
     state: &mut MachineState,
