@@ -1,5 +1,6 @@
 use core::{num, panic};
 use hashbrown::HashMap;
+use std::mem::transmute;
 
 use crate::Error;
 use crate::tokenizer::Token;
@@ -12,9 +13,9 @@ struct MachineState {
     functions: HashMap<String, usize>,
     exports: HashMap<String, usize>,
     function_stack: Vec<usize>,
-    stack: Vec<StackValue>,
+    stack: Vec<u8>,
     variable_map: HashMap<String, usize>,
-    variables: Vec<StackValue>,
+    variables: Vec<i128>,
     memory: Memory,
 }
 
@@ -269,9 +270,7 @@ impl TokenIter {
     }
 }
 
-pub fn run(
-    tokens: &mut Vec<Token>,
-) -> Result<(Vec<StackValue>, HashMap<String, usize>, Vec<StackValue>), Error> {
+pub fn run(tokens: &mut Vec<Token>) -> Result<(Vec<u8>, HashMap<String, usize>, Vec<i128>), Error> {
     let mut state = MachineState::new();
     let mut token_iter = TokenIter { index: 0 };
     find_funcs(&mut token_iter, &mut state, tokens)?;
@@ -415,17 +414,19 @@ fn run_func(
                     }
                 }
             }
-            Word(Pop) => {
-                token = tokens_iter.next(tokens);
-                match &token.token_type {
-                    Word(Mem) => {
-                        if let Some(value) = state.stack.pop() {
-                            state.memory.insert(&value.to_bytes())?
-                        }
-                    }
-                    _ => todo!("add ability to pop into variables"),
-                }
-            }
+            // Word(Pop) => {
+            //     token = tokens_iter.next(tokens);
+            //     match &token.token_type {
+            //         Word(Mem) => {
+            //             if let Some(value) = state.stack.pop() {
+            //                 state.memory.insert(unsafe {
+            //                     transmute(value)
+            //                 })?
+            //             }
+            //         }
+            //         _ => todo!("add ability to pop into variables"),
+            //     }
+            // }
             Word(Call) => run_call(tokens_iter, state, tokens)?,
             Word(Return) => {
                 break;
@@ -438,7 +439,7 @@ fn run_func(
                             let value = state.stack.pop().unwrap();
                             tokens[tokens_iter.index].token_type = TokenIndex(*index);
 
-                            if !value.is_zero() {
+                            if value != 0 {
                                 tokens_iter.index = *index
                             }
                         } else {
@@ -450,7 +451,7 @@ fn run_func(
                     }
                     TokenIndex(index) => {
                         let value = state.stack.pop().unwrap();
-                        if !value.is_zero() {
+                        if value != 0 {
                             tokens_iter.index = index
                         }
                     }
@@ -469,7 +470,7 @@ fn run_func(
                         if let Some(index) = labels.get(ident) {
                             let value = state.stack.pop().unwrap();
                             tokens[tokens_iter.index].token_type = TokenIndex(*index);
-                            if value.is_zero() {
+                            if value == 0 {
                                 tokens_iter.index = *index
                             }
                         } else {
@@ -481,7 +482,7 @@ fn run_func(
                     }
                     TokenIndex(index) => {
                         let value = state.stack.pop().unwrap();
-                        if value.is_zero() {
+                        if value == 0 {
                             tokens_iter.index = index
                         }
                     }
@@ -501,354 +502,84 @@ fn run_func(
             Word(F64) => run_numeric_instruction(tokens_iter, state, NumericType::F64, tokens)?,
             Word(F32) => run_numeric_instruction(tokens_iter, state, NumericType::F32, tokens)?,
             Word(Declare) => run_variable_decleration(tokens_iter, state, tokens)?,
-            Word(Set) => {
-                let peeked = tokens_iter.peek(tokens);
-                if let Word(Stack) = peeked.token_type {
-                    tokens_iter.next(tokens);
+            // Word(Set) => {
+            //     let peeked = tokens_iter.peek(tokens);
+            //     if let Word(Stack) = peeked.token_type {
+            //         todo!("need to redo this to account for variables of different lenghts");
+            //         tokens_iter.next(tokens);
 
-                    token = tokens_iter.next(tokens);
-                    let mut pointer: usize;
-                    match &token.token_type {
-                        Number(num) => pointer = *num as usize,
-                        VarIdent(ident) => {
-                            if let Some(index) = state.variable_map.get(ident) {
-                                let value = state.variables[*index];
-                                match value {
-                                    StackValue::F32(_) => {
-                                        return Err(RuntimeError::TriedIndexingWithFloat {
-                                            token: token.clone(),
-                                        })?;
-                                    }
-                                    StackValue::F64(_) => {
-                                        return Err(RuntimeError::TriedIndexingWithFloat {
-                                            token: token.clone(),
-                                        })?;
-                                    }
-                                    value => pointer = value.as_usize(),
-                                }
-                            } else {
-                                return Err(SemanticError::UndefinedVar {
-                                    ident: token.clone(),
-                                })?;
-                            }
-                        }
-                        Word(Top) => pointer = state.stack.len() - 1,
-                        _ => {
-                            return Err(SyntaxError::Expected {
-                                expected_token: "number for pointer".to_string(),
-                                found: token.clone(),
-                            })?;
-                        }
-                    }
-                    let peeked = tokens_iter.peek(tokens);
-                    match peeked.token_type {
-                        Plus => {
-                            tokens_iter.next(tokens);
-                            token = tokens_iter.next(tokens);
-                            match &token.token_type {
-                                Number(num) => pointer += *num as usize,
-                                Word(Top) => {
-                                    let top_of_stack =
-                                        state.stack[state.stack.len() - 1].as_usize();
-                                    pointer += top_of_stack
-                                }
-                                _ => {
-                                    return Err(SyntaxError::Expected {
-                                        expected_token: "number, or top".to_string(),
-                                        found: token.clone(),
-                                    })?;
-                                }
-                            }
-                        }
-                        Minus => {
-                            tokens_iter.next(tokens);
-                            token = tokens_iter.next(tokens);
-                            match &token.token_type {
-                                Number(num) => pointer -= *num as usize,
-                                Word(Top) => {
-                                    let top_of_stack =
-                                        state.stack[state.stack.len() - 1].as_usize();
-                                    pointer -= top_of_stack
-                                }
-                                _ => {
-                                    return Err(SyntaxError::Expected {
-                                        expected_token: "number, or top".to_string(),
-                                        found: token.clone(),
-                                    })?;
-                                }
-                            }
-                        }
-                        _ => {}
-                    }
-                    if let Some(value) = state.stack.pop() {
-                        state.stack[pointer] = value
-                    } else {
-                        return Err(RuntimeError::PoppingEmptyStack {
-                            popped_into: token.clone(),
-                        })?;
-                    }
-                } else {
-                    run_variable_set(tokens_iter, state, tokens)?
-                }
-            }
-            Word(Get) => run_variable_get(tokens_iter, state, tokens)?,
-            Word(Cpy) => {
-                token = tokens_iter.next(tokens);
-                let mut pointer: usize;
-                match &token.token_type {
-                    Number(num) => pointer = *num as usize,
-                    VarIdent(ident) => {
-                        if let Some(index) = state.variable_map.get(ident) {
-                            let value = state.variables[*index];
-                            match value {
-                                StackValue::F32(_) => {
-                                    return Err(RuntimeError::TriedIndexingWithFloat {
-                                        token: token.clone(),
-                                    })?;
-                                }
-                                StackValue::F64(_) => {
-                                    return Err(RuntimeError::TriedIndexingWithFloat {
-                                        token: token.clone(),
-                                    })?;
-                                }
-                                value => pointer = value.as_usize(),
-                            }
-                        } else {
-                            return Err(SemanticError::UndefinedVar {
-                                ident: token.clone(),
-                            })?;
-                        }
-                    }
-                    Word(Top) => pointer = state.stack.len() - 1,
-                    _ => {
-                        return Err(SyntaxError::Expected {
-                            expected_token: "number for pointer".to_string(),
-                            found: token.clone(),
-                        })?;
-                    }
-                }
-                let peeked = tokens_iter.peek(tokens);
-                match peeked.token_type {
-                    Plus => {
-                        tokens_iter.next(tokens);
-                        token = tokens_iter.next(tokens);
-                        match &token.token_type {
-                            Number(num) => pointer += *num as usize,
-                            Word(Top) => {
-                                let top_of_stack = state.stack[state.stack.len() - 1].as_usize();
-                                pointer += top_of_stack
-                            }
-                            _ => {
-                                return Err(SyntaxError::Expected {
-                                    expected_token: "number, or top".to_string(),
-                                    found: token.clone(),
-                                })?;
-                            }
-                        }
-                    }
-                    Minus => {
-                        tokens_iter.next(tokens);
-                        token = tokens_iter.next(tokens);
-                        match &token.token_type {
-                            Number(num) => pointer -= *num as usize,
-                            Word(Top) => {
-                                let top_of_stack = state.stack[state.stack.len() - 1].as_usize();
-                                pointer -= top_of_stack
-                            }
-                            _ => {
-                                return Err(SyntaxError::Expected {
-                                    expected_token: "number, or top".to_string(),
-                                    found: token.clone(),
-                                })?;
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-                token = tokens_iter.next(tokens);
-                match &token.token_type {
-                    Word(Mem) => {
-                        if let Some(value) = state.stack.get(pointer) {
-                            state.memory.insert(&value.to_bytes())?
-                        } else {
-                            return Err(RuntimeError::NoValueFoundAtStackIndex {
-                                index: pointer,
-                                token: token.clone(),
-                            })?;
-                        }
-                    }
-                    VarIdent(ident) => {
-                        if let Some(stack_value) = state.stack.get(pointer) {
-                            if let Some(var_index) = state.variable_map.get(ident) {
-                                state.variables[*var_index] = *stack_value
-                            } else {
-                                return Err(SemanticError::UndefinedVar {
-                                    ident: token.clone(),
-                                })?;
-                            }
-                        } else {
-                            return Err(RuntimeError::NoValueFoundAtStackIndex {
-                                index: pointer,
-                                token: token.clone(),
-                            })?;
-                        }
-                    }
-                    Word(Top) => {
-                        if let Some(stack_value) = state.stack.get(pointer) {
-                            let top_index = state.stack.len() - 1;
-                            state.stack[top_index] = *stack_value
-                        } else {
-                            return Err(RuntimeError::NoValueFoundAtStackIndex {
-                                index: pointer,
-                                token: token.clone(),
-                            })?;
-                        }
-                    }
-                    _ => {
-                        return Err(SyntaxError::Expected {
-                            expected_token: "mem or var ident".to_string(),
-                            found: token.clone(),
-                        })?;
-                    }
-                }
-            }
-            Word(Cast) => {
-                token = tokens_iter.next(tokens);
-                match token.token_type {
-                    Word(I32) => {
-                        if let Some(value) = state.stack.pop() {
-                            state.stack.push(StackValue::I32(match value {
-                                StackValue::F32(val) => val as i32,
-                                StackValue::F64(val) => val as i32,
-                                StackValue::I128(val) => val as i32,
-                                StackValue::I64(val) => val as i32,
-                                StackValue::I32(val) => val as i32,
-                                StackValue::I16(val) => val as i32,
-                                StackValue::I8(val) => val as i32,
-                                StackValue::Null => {
-                                    return Err(RuntimeError::CastFromNull {
-                                        token: token.clone(),
-                                    })?;
-                                }
-                            }));
-                        }
-                    }
-                    Word(I64) => {
-                        if let Some(value) = state.stack.pop() {
-                            state.stack.push(StackValue::I64(match value {
-                                StackValue::F32(val) => val as i64,
-                                StackValue::F64(val) => val as i64,
-                                StackValue::I128(val) => val as i64,
-                                StackValue::I64(val) => val as i64,
-                                StackValue::I32(val) => val as i64,
-                                StackValue::I16(val) => val as i64,
-                                StackValue::I8(val) => val as i64,
-                                StackValue::Null => {
-                                    return Err(RuntimeError::CastFromNull {
-                                        token: token.clone(),
-                                    })?;
-                                }
-                            }));
-                        }
-                    }
-                    Word(I128) => {
-                        if let Some(value) = state.stack.pop() {
-                            state.stack.push(StackValue::I128(match value {
-                                StackValue::F32(val) => val as i128,
-                                StackValue::F64(val) => val as i128,
-                                StackValue::I128(val) => val as i128,
-                                StackValue::I64(val) => val as i128,
-                                StackValue::I32(val) => val as i128,
-                                StackValue::I16(val) => val as i128,
-                                StackValue::I8(val) => val as i128,
-                                StackValue::Null => {
-                                    return Err(RuntimeError::CastFromNull {
-                                        token: token.clone(),
-                                    })?;
-                                }
-                            }));
-                        }
-                    }
-                    Word(I16) => {
-                        if let Some(value) = state.stack.pop() {
-                            state.stack.push(StackValue::I16(match value {
-                                StackValue::F32(val) => val as i16,
-                                StackValue::F64(val) => val as i16,
-                                StackValue::I128(val) => val as i16,
-                                StackValue::I64(val) => val as i16,
-                                StackValue::I32(val) => val as i16,
-                                StackValue::I16(val) => val as i16,
-                                StackValue::I8(val) => val as i16,
-                                StackValue::Null => {
-                                    return Err(RuntimeError::CastFromNull {
-                                        token: token.clone(),
-                                    })?;
-                                }
-                            }));
-                        }
-                    }
-                    Word(I8) => {
-                        if let Some(value) = state.stack.pop() {
-                            state.stack.push(StackValue::I8(match value {
-                                StackValue::F32(val) => val as i8,
-                                StackValue::F64(val) => val as i8,
-                                StackValue::I128(val) => val as i8,
-                                StackValue::I64(val) => val as i8,
-                                StackValue::I32(val) => val as i8,
-                                StackValue::I16(val) => val as i8,
-                                StackValue::I8(val) => val as i8,
-                                StackValue::Null => {
-                                    return Err(RuntimeError::CastFromNull {
-                                        token: token.clone(),
-                                    })?;
-                                }
-                            }));
-                        }
-                    }
-                    Word(F32) => {
-                        if let Some(value) = state.stack.pop() {
-                            state.stack.push(StackValue::F32(match value {
-                                StackValue::F32(val) => val as f32,
-                                StackValue::F64(val) => val as f32,
-                                StackValue::I128(val) => val as f32,
-                                StackValue::I64(val) => val as f32,
-                                StackValue::I32(val) => val as f32,
-                                StackValue::I16(val) => val as f32,
-                                StackValue::I8(val) => val as f32,
-                                StackValue::Null => {
-                                    return Err(RuntimeError::CastFromNull {
-                                        token: token.clone(),
-                                    })?;
-                                }
-                            }));
-                        }
-                    }
-                    Word(F64) => {
-                        if let Some(value) = state.stack.pop() {
-                            state.stack.push(StackValue::F64(match value {
-                                StackValue::F32(val) => val as f64,
-                                StackValue::F64(val) => val as f64,
-                                StackValue::I128(val) => val as f64,
-                                StackValue::I64(val) => val as f64,
-                                StackValue::I32(val) => val as f64,
-                                StackValue::I16(val) => val as f64,
-                                StackValue::I8(val) => val as f64,
-                                StackValue::Null => {
-                                    return Err(RuntimeError::CastFromNull {
-                                        token: token.clone(),
-                                    })?;
-                                }
-                            }));
-                        }
-                    }
-                    _ => {
-                        return Err(SyntaxError::Expected {
-                            expected_token: "type".to_string(),
-                            found: token.clone(),
-                        })?;
-                    }
-                }
-            }
+            //         token = tokens_iter.next(tokens);
+            //         let mut pointer: usize;
+            //         match &token.token_type {
+            //             Number(num) => pointer = *num as usize,
+            //             VarIdent(ident) => {
+            //                 if let Some(index) = state.variable_map.get(ident) {
+            //                     let value = state.variables[*index];
+            //                     pointer = value as usize;
+            //                 } else {
+            //                     return Err(SemanticError::UndefinedVar {
+            //                         ident: token.clone(),
+            //                     })?;
+            //                 }
+            //             }
+            //             Word(Top) => pointer = state.stack.len() - 1,
+            //             _ => {
+            //                 return Err(SyntaxError::Expected {
+            //                     expected_token: "number for pointer".to_string(),
+            //                     found: token.clone(),
+            //                 })?;
+            //             }
+            //         }
+            //         let peeked = tokens_iter.peek(tokens);
+            //         match peeked.token_type {
+            //             Plus => {
+            //                 tokens_iter.next(tokens);
+            //                 token = tokens_iter.next(tokens);
+            //                 match &token.token_type {
+            //                     Number(num) => pointer += *num as usize,
+            //                     Word(Top) => {
+            //                         let top_of_stack = state.stack[state.stack.len() - 1] as usize;
+            //                         pointer += top_of_stack
+            //                     }
+            //                     _ => {
+            //                         return Err(SyntaxError::Expected {
+            //                             expected_token: "number, or top".to_string(),
+            //                             found: token.clone(),
+            //                         })?;
+            //                     }
+            //                 }
+            //             }
+            //             Minus => {
+            //                 tokens_iter.next(tokens);
+            //                 token = tokens_iter.next(tokens);
+            //                 match &token.token_type {
+            //                     Number(num) => pointer -= *num as usize,
+            //                     Word(Top) => {
+            //                         let top_of_stack = state.stack[state.stack.len() - 1] as usize;
+            //                         pointer -= top_of_stack
+            //                     }
+            //                     _ => {
+            //                         return Err(SyntaxError::Expected {
+            //                             expected_token: "number, or top".to_string(),
+            //                             found: token.clone(),
+            //                         })?;
+            //                     }
+            //                 }
+            //             }
+            //             _ => {}
+            //         }
+            //         if let Some(value) = state.stack.pop() {
+            //             state.stack[pointer] = value
+            //         } else {
+            //             return Err(RuntimeError::PoppingEmptyStack {
+            //                 popped_into: token.clone(),
+            //             })?;
+            //         }
+            //     } else {
+            //         run_variable_set(tokens_iter, state, tokens)?
+            //     }
+            // }
+            // Word(Get) => run_variable_get(tokens_iter, state, tokens)?,
             _ => {
                 return Err(SyntaxError::Expected {
                     expected_token: "function instruction".to_string(),
@@ -878,6 +609,20 @@ enum NumericType {
     F64,
 }
 
+impl NumericType {
+    fn size(&self) -> usize {
+        match self {
+            NumericType::I128 => size_of::<i128>(),
+            NumericType::I64 => size_of::<i64>(),
+            NumericType::I32 => size_of::<i32>(),
+            NumericType::I16 => size_of::<i16>(),
+            NumericType::I8 => size_of::<i8>(),
+            NumericType::F32 => size_of::<f32>(),
+            NumericType::F64 => size_of::<f64>(),
+        }
+    }
+}
+
 fn run_variable_decleration(
     tokens_iter: &mut TokenIter,
     state: &mut MachineState,
@@ -889,7 +634,7 @@ fn run_variable_decleration(
     } {
         let token = tokens_iter.next(tokens);
         if let VarIdent(ident) = &token.token_type {
-            state.variables.push(StackValue::Null);
+            state.variables.push(0);
             state
                 .variable_map
                 .insert(ident.clone(), state.variables.len() - 1);
@@ -903,47 +648,94 @@ fn run_variable_decleration(
     Ok(())
 }
 
+macro_rules! set_variable {
+    ($state:ident, $token:ident, $tokens:ident, $tokens_iter:ident, $num_type:ty) => {{
+        let value = $state
+            .stack
+            .last_chunk::<{ size_of::<$num_type>() }>()
+            .unwrap()
+            .clone();
+        $state.stack.truncate(size_of::<$num_type>());
+        match &$token.token_type {
+            VarIdent(ident) => {
+                if let Some(index) = $state.variable_map.get(ident) {
+                    $tokens[$tokens_iter.index].token_type = TokenIndex(*index);
+
+                    $state.variables[*index] = <$num_type>::from_ne_bytes(value) as i128;
+                    Ok(())
+                } else {
+                    Err(SemanticError::UndefinedVar {
+                        ident: $token.clone(),
+                    }
+                    .into())
+                }
+            }
+            TokenIndex(index) => {
+                $state.variables[*index] = <$num_type>::from_ne_bytes(value) as i128;
+                Ok(())
+            }
+            _ => Err(SyntaxError::Expected {
+                expected_token: "variable".to_string(),
+                found: $token.clone(),
+            }
+            .into()),
+        }
+    }};
+}
+
 fn run_variable_set(
     tokens_iter: &mut TokenIter,
     state: &mut MachineState,
     tokens: &mut Vec<Token>,
+    num_type: NumericType,
 ) -> Result<(), Error> {
     let token = tokens_iter.next(tokens);
-    let value = state
-        .stack
-        .pop()
-        .ok_or_else(|| RuntimeError::PoppingEmptyStack {
-            popped_into: token.clone(),
-        })?;
-    match &token.token_type {
-        VarIdent(ident) => {
-            if let Some(index) = state.variable_map.get(ident) {
-                tokens[tokens_iter.index].token_type = TokenIndex(*index);
-                state.variables[*index] = value;
-                Ok(())
-            } else {
-                Err(SemanticError::UndefinedVar {
-                    ident: token.clone(),
-                }
-                .into())
-            }
-        }
-        TokenIndex(index) => {
-            state.variables[*index] = value;
-            Ok(())
-        }
-        _ => Err(SyntaxError::Expected {
-            expected_token: "variable".to_string(),
-            found: token.clone(),
-        }
-        .into()),
+    match num_type {
+        NumericType::I128 => set_variable!(state, token, tokens, tokens_iter, i128),
+        NumericType::I64 => set_variable!(state, token, tokens, tokens_iter, i64),
+        NumericType::I32 => set_variable!(state, token, tokens, tokens_iter, i32),
+        NumericType::I16 => set_variable!(state, token, tokens, tokens_iter, i16),
+        NumericType::I8 => set_variable!(state, token, tokens, tokens_iter, i8),
+        NumericType::F32 => set_variable!(state, token, tokens, tokens_iter, f32),
+        NumericType::F64 => set_variable!(state, token, tokens, tokens_iter, f64),
     }
+    // let value = state
+    //     .stack
+    //     .pop()
+    //     .ok_or_else(|| RuntimeError::PoppingEmptyStack {
+    //         popped_into: token.clone(),
+    //     })?;
+    // let value = state.stack.last_chunk::<{size}>().unwrap();
+    // match &token.token_type {
+    //     VarIdent(ident) => {
+    //         if let Some(index) = state.variable_map.get(ident) {
+    //             tokens[tokens_iter.index].token_type = TokenIndex(*index);
+    //             state.variables[*index] = value;
+    //             Ok(())
+    //         } else {
+    //             Err(SemanticError::UndefinedVar {
+    //                 ident: token.clone(),
+    //             }
+    //             .into())
+    //         }
+    //     }
+    //     TokenIndex(index) => {
+    //         state.variables[*index] = value;
+    //         Ok(())
+    //     }
+    //     _ => Err(SyntaxError::Expected {
+    //         expected_token: "variable".to_string(),
+    //         found: token.clone(),
+    //     }
+    //     .into()),
+    // }
 }
 
 fn run_variable_get(
     tokens_iter: &mut TokenIter,
     state: &mut MachineState,
     tokens: &mut Vec<Token>,
+    num_type: &NumericType
 ) -> Result<(), Error> {
     let token = tokens_iter.next(tokens);
     let index = match &token.token_type {
@@ -970,42 +762,319 @@ fn run_variable_get(
             })?;
         }
     };
-    state.stack.push(state.variables[*index]);
+    match num_type {
+        NumericType::I128 => {let value = (state.variables[*index] as i128).to_ne_bytes();
+        for i in value {
+            state.stack.push(i);
+        }
+        } ,
+        NumericType::I64 => {let value = (state.variables[*index] as i64).to_ne_bytes();
+        for i in value {
+            state.stack.push(i);
+        }
+        } ,
+        NumericType::I32 => {let value = (state.variables[*index] as i32).to_ne_bytes();
+        for i in value {
+            state.stack.push(i);
+        }
+        } ,
+        NumericType::I16 => {let value = (state.variables[*index] as i16).to_ne_bytes();
+        for i in value {
+            state.stack.push(i);
+        }
+        } ,
+        NumericType::I8 => {let value = (state.variables[*index] as i8).to_ne_bytes();
+        for i in value {
+            state.stack.push(i);
+        }
+        } ,
+        NumericType::F32 => {let value = (state.variables[*index] as f32).to_ne_bytes();
+        for i in value {
+            state.stack.push(i);
+        }
+        } ,
+        NumericType::F64 => {let value = (state.variables[*index] as f64).to_ne_bytes();
+        for i in value {
+            state.stack.push(i);
+        }
+        } ,
+    };
+    // state.stack.push(state.variables[*index]);
 
     Ok(())
 }
 
+fn get_num_size(num_type: &NumericType) -> usize {
+    match num_type {
+        NumericType::I128 => size_of::<i128>(),
+        NumericType::I64 => size_of::<i64>(),
+        NumericType::I32 => size_of::<i32>(),
+        NumericType::I16 => size_of::<i16>(),
+        NumericType::I8 => size_of::<i8>(),
+        NumericType::F32 => size_of::<f32>(),
+        NumericType::F64 => size_of::<f64>(),
+    }
+}
+
 fn run_numeric_instruction(
-    token_iter: &mut TokenIter,
+    tokens_iter: &mut TokenIter,
     state: &mut MachineState,
     num_type: NumericType,
-    tokens: &Vec<Token>,
+    tokens: &mut Vec<Token>,
 ) -> Result<(), Error> {
-    let mut token = token_iter.next(tokens);
+    let mut token = tokens_iter.next(tokens);
     match token.token_type {
+        Word(Set) => {
+            let peeked = tokens_iter.peek(tokens);
+            if let Word(Stack) = peeked.token_type {
+                todo!("need to redo this to account for variables of different lenghts");
+                tokens_iter.next(tokens);
+
+                token = tokens_iter.next(tokens);
+                let mut pointer: usize;
+                match &token.token_type {
+                    Number(num) => pointer = *num as usize,
+                    VarIdent(ident) => {
+                        if let Some(index) = state.variable_map.get(ident) {
+                            let value = state.variables[*index];
+                            pointer = value as usize;
+                        } else {
+                            return Err(SemanticError::UndefinedVar {
+                                ident: token.clone(),
+                            })?;
+                        }
+                    }
+                    Word(Top) => pointer = state.stack.len() - 1,
+                    _ => {
+                        return Err(SyntaxError::Expected {
+                            expected_token: "number for pointer".to_string(),
+                            found: token.clone(),
+                        })?;
+                    }
+                }
+                let peeked = tokens_iter.peek(tokens);
+                match peeked.token_type {
+                    Plus => {
+                        tokens_iter.next(tokens);
+                        token = tokens_iter.next(tokens);
+                        match &token.token_type {
+                            Number(num) => pointer += *num as usize,
+                            Word(Top) => {
+                                let top_of_stack = state.stack[state.stack.len() - 1] as usize;
+                                pointer += top_of_stack
+                            }
+                            _ => {
+                                return Err(SyntaxError::Expected {
+                                    expected_token: "number, or top".to_string(),
+                                    found: token.clone(),
+                                })?;
+                            }
+                        }
+                    }
+                    Minus => {
+                        tokens_iter.next(tokens);
+                        token = tokens_iter.next(tokens);
+                        match &token.token_type {
+                            Number(num) => pointer -= *num as usize,
+                            Word(Top) => {
+                                let top_of_stack = state.stack[state.stack.len() - 1] as usize;
+                                pointer -= top_of_stack
+                            }
+                            _ => {
+                                return Err(SyntaxError::Expected {
+                                    expected_token: "number, or top".to_string(),
+                                    found: token.clone(),
+                                })?;
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+                if let Some(value) = state.stack.pop() {
+                    state.stack[pointer] = value;
+                    Ok(())
+                } else {
+                    return Err(RuntimeError::PoppingEmptyStack {
+                        popped_into: token.clone(),
+                    })?;
+                }
+            } else {
+                run_variable_set(tokens_iter, state, tokens, num_type)
+            }
+        }
+        Word(Get) => run_variable_get(tokens_iter, state, tokens, &num_type),
         Word(Push) => {
-            while matches!(token_iter.peek(tokens).token_type, Number(_)) {
-                token = token_iter.next(tokens);
+            // todo!("int lit notation");
+            while matches!(tokens_iter.peek(tokens).token_type, Number(_)) {
+                token = tokens_iter.next(tokens);
                 if let Number(num) = token.token_type {
                     match num_type {
-                        NumericType::I128 => state.stack.push(StackValue::I128(num)),
-                        NumericType::I64 => state.stack.push(StackValue::I64(num as i64)),
-                        NumericType::I32 => state.stack.push(StackValue::I32(num as i32)),
-                        NumericType::I16 => state.stack.push(StackValue::I16(num as i16)),
-                        NumericType::I8 => state.stack.push(StackValue::I8(num as i8)),
+                        NumericType::I128 => {
+                            for i in (num as i128).to_ne_bytes() {
+                                state.stack.push(i);                                
+                            }
+                        }
+                        NumericType::I64 => {
+                            for i in (num as i64).to_ne_bytes() {
+                                state.stack.push(i);                                
+                            }
+                        }
+                        NumericType::I32 => {
+                            for i in (num as i32).to_ne_bytes() {
+                                state.stack.push(i);                                
+                            }
+                        }
+                        NumericType::I16 => {
+                            for i in (num as i16).to_ne_bytes() {
+                                state.stack.push(i);                                
+                            }
+                        }
+                        NumericType::I8 => {
+                            for i in (num as i8).to_ne_bytes() {
+                                state.stack.push(i);                                
+                            }
+                        }
                         NumericType::F32 => {
-                            let float = parse_float32(token_iter, num, tokens)?;
-                            state.stack.push(StackValue::F32(float));
+                            let float = parse_float32(tokens_iter, num, tokens)?;
+                            state.stack.append(&mut float.to_ne_bytes().to_vec());
                         }
                         NumericType::F64 => {
-                            let float = parse_float64(token_iter, num, tokens)?;
-                            state.stack.push(StackValue::F64(float));
+                            let float = parse_float64(tokens_iter, num, tokens)?;
+                            state.stack.append(&mut float.to_ne_bytes().to_vec());
                         }
                     }
                 }
             }
             Ok(())
         }
+        Word(Pop) => {
+            token = tokens_iter.next(tokens);
+            match &token.token_type {
+                Word(Mem) => {
+                    let popped = state
+                        .stack
+                        .split_off(state.stack.len() - 1 - get_num_size(&num_type));
+                    state.memory.insert(&popped)?
+                    // if let Some(value) = state.stack.pop() {
+                    //     state.memory.insert(unsafe {
+                    //         transmute(value)
+                    //     })?
+                    // }
+                }
+                _ => todo!("add ability to pop into variables"),
+            }
+            Ok(())
+        }
+
+        // Word(Cpy) => {
+        //     token = tokens_iter.next(tokens);
+        //     let mut pointer: usize;
+        //     match &token.token_type {
+        //         Number(num) => pointer = *num as usize,
+        //         VarIdent(ident) => {
+        //             if let Some(index) = state.variable_map.get(ident) {
+        //                 let value = state.variables[*index];
+        //                 pointer = value as usize
+        //             } else {
+        //                 return Err(SemanticError::UndefinedVar {
+        //                     ident: token.clone(),
+        //                 })?;
+        //             }
+        //         }
+        //         Word(Top) => pointer = state.stack.len() - 1,
+        //         _ => {
+        //             return Err(SyntaxError::Expected {
+        //                 expected_token: "number for pointer".to_string(),
+        //                 found: token.clone(),
+        //             })?;
+        //         }
+        //     }
+        //     let peeked = tokens_iter.peek(tokens);
+        //     match peeked.token_type {
+        //         Plus => {
+        //             tokens_iter.next(tokens);
+        //             token = tokens_iter.next(tokens);
+        //             match &token.token_type {
+        //                 Number(num) => pointer += *num as usize,
+        //                 Word(Top) => {
+        //                     let top_of_stack = state.stack[state.stack.len() - 1] as usize;
+        //                     pointer += top_of_stack
+        //                 }
+        //                 _ => {
+        //                     return Err(SyntaxError::Expected {
+        //                         expected_token: "number, or top".to_string(),
+        //                         found: token.clone(),
+        //                     })?;
+        //                 }
+        //             }
+        //         }
+        //         Minus => {
+        //             tokens_iter.next(tokens);
+        //             token = tokens_iter.next(tokens);
+        //             match &token.token_type {
+        //                 Number(num) => pointer -= *num as usize,
+        //                 Word(Top) => {
+        //                     let top_of_stack = state.stack[state.stack.len() - 1] as usize;
+        //                     pointer -= top_of_stack
+        //                 }
+        //                 _ => {
+        //                     return Err(SyntaxError::Expected {
+        //                         expected_token: "number, or top".to_string(),
+        //                         found: token.clone(),
+        //                     })?;
+        //                 }
+        //             }
+        //         }
+        //         _ => {}
+        //     }
+        //     token = tokens_iter.next(tokens);
+        //     match &token.token_type {
+        //         Word(Mem) => {
+        //             if let Some(value) = state.stack.get(pointer) {
+        //                 state.memory.insert(unsafe { transmute(value) })?
+        //             } else {
+        //                 return Err(RuntimeError::NoValueFoundAtStackIndex {
+        //                     index: pointer,
+        //                     token: token.clone(),
+        //                 })?;
+        //             }
+        //         }
+        //         VarIdent(ident) => {
+        //             if let Some(stack_value) = state.stack.get(pointer) {
+        //                 if let Some(var_index) = state.variable_map.get(ident) {
+        //                     state.variables[*var_index] = *stack_value
+        //                 } else {
+        //                     return Err(SemanticError::UndefinedVar {
+        //                         ident: token.clone(),
+        //                     })?;
+        //                 }
+        //             } else {
+        //                 return Err(RuntimeError::NoValueFoundAtStackIndex {
+        //                     index: pointer,
+        //                     token: token.clone(),
+        //                 })?;
+        //             }
+        //         }
+        //         Word(Top) => {
+        //             if let Some(stack_value) = state.stack.get(pointer) {
+        //                 let top_index = state.stack.len() - 1;
+        //                 state.stack[top_index] = *stack_value
+        //             } else {
+        //                 return Err(RuntimeError::NoValueFoundAtStackIndex {
+        //                     index: pointer,
+        //                     token: token.clone(),
+        //                 })?;
+        //             }
+        //         }
+        //         _ => {
+        //             return Err(SyntaxError::Expected {
+        //                 expected_token: "mem or var ident".to_string(),
+        //                 found: token.clone(),
+        //             })?;
+        //         }
+        //     }
+        //     Ok(())
+        // }
         Word(Add) => process_numerical_op(state, num_type, NumericeOp::Add),
         Word(Sub) => process_numerical_op(state, num_type, NumericeOp::Sub),
         Word(Mul) => process_numerical_op(state, num_type, NumericeOp::Mul),
@@ -1022,69 +1091,69 @@ fn run_numeric_instruction(
         Word(Lt) => process_numerical_op(state, num_type, NumericeOp::Lt),
         Word(Max) => process_numerical_op(state, num_type, NumericeOp::Max),
         Word(Min) => process_numerical_op(state, num_type, NumericeOp::Min),
-        Word(Cpy) => {
-            token = token_iter.next(tokens);
-            let pointer: usize;
-            if let Number(num) = &token.token_type {
-                pointer = *num as usize
-            } else {
-                return Err(SyntaxError::Expected {
-                    expected_token: "number".to_string(),
-                    found: token.clone(),
-                })?;
-            }
-            match num_type {
-                NumericType::I128 => {
-                    let bytes = state.memory.copy(pointer, size_of::<i128>());
-                    state.stack.push(StackValue::I128(i128::from_be_bytes(
-                        bytes.try_into().unwrap(),
-                    )));
-                    Ok(())
-                }
-                NumericType::I64 => {
-                    let bytes = state.memory.copy(pointer, size_of::<i64>());
-                    state.stack.push(StackValue::I64(i64::from_be_bytes(
-                        bytes.try_into().unwrap(),
-                    )));
-                    Ok(())
-                }
-                NumericType::I32 => {
-                    let bytes = state.memory.copy(pointer, size_of::<i32>());
-                    state.stack.push(StackValue::I32(i32::from_be_bytes(
-                        bytes.try_into().unwrap(),
-                    )));
-                    Ok(())
-                }
-                NumericType::I16 => {
-                    let bytes = state.memory.copy(pointer, size_of::<i16>());
-                    state.stack.push(StackValue::I16(i16::from_be_bytes(
-                        bytes.try_into().unwrap(),
-                    )));
-                    Ok(())
-                }
-                NumericType::I8 => {
-                    let bytes = state.memory.copy(pointer, size_of::<i8>());
-                    state
-                        .stack
-                        .push(StackValue::I8(i8::from_be_bytes(bytes.try_into().unwrap())));
-                    Ok(())
-                }
-                NumericType::F32 => {
-                    let bytes = state.memory.copy(pointer, size_of::<f32>());
-                    state.stack.push(StackValue::F32(f32::from_be_bytes(
-                        bytes.try_into().unwrap(),
-                    )));
-                    Ok(())
-                }
-                NumericType::F64 => {
-                    let bytes = state.memory.copy(pointer, size_of::<f64>());
-                    state.stack.push(StackValue::F64(f64::from_be_bytes(
-                        bytes.try_into().unwrap(),
-                    )));
-                    Ok(())
-                }
-            }
-        }
+        // Word(Cpy) => {
+        //     token = tokens_iter.next(tokens);
+        //     let pointer: usize;
+        //     if let Number(num) = &token.token_type {
+        //         pointer = *num as usize
+        //     } else {
+        //         return Err(SyntaxError::Expected {
+        //             expected_token: "number".to_string(),
+        //             found: token.clone(),
+        //         })?;
+        //     }
+        //     match num_type {
+        //         NumericType::I128 => {
+        //             let bytes = state.memory.copy(pointer, size_of::<i128>());
+        //             state.stack.push(StackValue::I128(i128::from_be_bytes(
+        //                 bytes.try_into().unwrap(),
+        //             )));
+        //             Ok(())
+        //         }
+        //         NumericType::I64 => {
+        //             let bytes = state.memory.copy(pointer, size_of::<i64>());
+        //             state.stack.push(StackValue::I64(i64::from_be_bytes(
+        //                 bytes.try_into().unwrap(),
+        //             )));
+        //             Ok(())
+        //         }
+        //         NumericType::I32 => {
+        //             let bytes = state.memory.copy(pointer, size_of::<i32>());
+        //             state.stack.push(StackValue::I32(i32::from_be_bytes(
+        //                 bytes.try_into().unwrap(),
+        //             )));
+        //             Ok(())
+        //         }
+        //         NumericType::I16 => {
+        //             let bytes = state.memory.copy(pointer, size_of::<i16>());
+        //             state.stack.push(StackValue::I16(i16::from_be_bytes(
+        //                 bytes.try_into().unwrap(),
+        //             )));
+        //             Ok(())
+        //         }
+        //         NumericType::I8 => {
+        //             let bytes = state.memory.copy(pointer, size_of::<i8>());
+        //             state
+        //                 .stack
+        //                 .push(StackValue::I8(i8::from_be_bytes(bytes.try_into().unwrap())));
+        //             Ok(())
+        //         }
+        //         NumericType::F32 => {
+        //             let bytes = state.memory.copy(pointer, size_of::<f32>());
+        //             state.stack.push(StackValue::F32(f32::from_be_bytes(
+        //                 bytes.try_into().unwrap(),
+        //             )));
+        //             Ok(())
+        //         }
+        //         NumericType::F64 => {
+        //             let bytes = state.memory.copy(pointer, size_of::<f64>());
+        //             state.stack.push(StackValue::F64(f64::from_be_bytes(
+        //                 bytes.try_into().unwrap(),
+        //             )));
+        //             Ok(())
+        //         }
+        //     }
+        // }
         _ => Err(SyntaxError::Expected {
             expected_token: "numeric operation".to_string(),
             found: token.clone(),
@@ -1279,41 +1348,314 @@ enum NumericeOp {
 }
 
 macro_rules! perform_operation {
-    (for int $type:ty, $operation:ident, $rhs:ident, $lhs:ident) => {
+    (for int $type:ty, $operation:ident, $state:ident) => {
         match $operation {
-            NumericeOp::Add => $lhs + $rhs,
-            NumericeOp::Sub => $lhs - $rhs,
-            NumericeOp::Mul => $lhs * $rhs,
-            NumericeOp::Div => $lhs / $rhs,
-            NumericeOp::Rem => $lhs % $rhs,
-            NumericeOp::And => $lhs & $rhs,
-            NumericeOp::Or => $lhs | $rhs,
-            NumericeOp::Xor => $lhs ^ $rhs,
-            NumericeOp::Eq => ($lhs == $rhs) as $type,
-            NumericeOp::Neq => ($lhs != $rhs) as $type,
-            NumericeOp::Gte => ($lhs >= $rhs) as $type,
-            NumericeOp::Gt => ($lhs > $rhs) as $type,
-            NumericeOp::Lte => ($lhs <= $rhs) as $type,
-            NumericeOp::Lt => ($lhs < $rhs) as $type,
-            NumericeOp::Max => $lhs.max($rhs),
-            NumericeOp::Min => $lhs.min($rhs),
+            NumericeOp::Add => {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = (<$type>::from_ne_bytes(lhs) + <$type>::from_ne_bytes(rhs)).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
+            NumericeOp::Sub =>  {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = (<$type>::from_ne_bytes(lhs) - <$type>::from_ne_bytes(rhs)).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
+            NumericeOp::Mul =>  {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = (<$type>::from_ne_bytes(lhs) * <$type>::from_ne_bytes(rhs)).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
+            NumericeOp::Div =>  {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = (<$type>::from_ne_bytes(lhs) / <$type>::from_ne_bytes(rhs)).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
+            NumericeOp::Rem =>  {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = (<$type>::from_ne_bytes(lhs) % <$type>::from_ne_bytes(rhs)).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
+            NumericeOp::And =>  {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = (<$type>::from_ne_bytes(lhs) & <$type>::from_ne_bytes(rhs)).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
+            NumericeOp::Or =>  {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = (<$type>::from_ne_bytes(lhs) | <$type>::from_ne_bytes(rhs)).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
+            NumericeOp::Xor =>  {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = (<$type>::from_ne_bytes(lhs) ^ <$type>::from_ne_bytes(rhs)).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
+            NumericeOp::Eq => {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = ((<$type>::from_ne_bytes(lhs) == <$type>::from_ne_bytes(rhs)) as u8).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
+            NumericeOp::Neq => {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = ((<$type>::from_ne_bytes(lhs) != <$type>::from_ne_bytes(rhs)) as u8).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
+            NumericeOp::Gte => {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = ((<$type>::from_ne_bytes(lhs) >= <$type>::from_ne_bytes(rhs)) as u8).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
+            NumericeOp::Gt => {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = ((<$type>::from_ne_bytes(lhs) > <$type>::from_ne_bytes(rhs)) as u8).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
+            NumericeOp::Lte => {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = ((<$type>::from_ne_bytes(lhs) <= <$type>::from_ne_bytes(rhs)) as u8).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
+            NumericeOp::Lt => {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = ((<$type>::from_ne_bytes(lhs) < <$type>::from_ne_bytes(rhs)) as u8).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
+            NumericeOp::Max => {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = (<$type>::from_ne_bytes(lhs).max(<$type>::from_ne_bytes(rhs))).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
+            NumericeOp::Min => {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = (<$type>::from_ne_bytes(lhs).min(<$type>::from_ne_bytes(rhs))).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
         }
     };
-    (for float $type:ty, $operation:ident, $rhs:ident, $lhs:ident) => {
+    (for float $type:ty, $operation:ident, $state:ident) => {
         match $operation {
-            NumericeOp::Add => $lhs + $rhs,
-            NumericeOp::Sub => $lhs - $rhs,
-            NumericeOp::Mul => $lhs * $rhs,
-            NumericeOp::Div => $lhs / $rhs,
-            NumericeOp::Rem => $lhs % $rhs,
-            NumericeOp::Eq => ($lhs == $rhs) as i32 as $type,
-            NumericeOp::Neq => ($lhs != $rhs) as i32 as $type,
-            NumericeOp::Gte => ($lhs >= $rhs) as i32 as $type,
-            NumericeOp::Gt => ($lhs > $rhs) as i32 as $type,
-            NumericeOp::Lte => ($lhs <= $rhs) as i32 as $type,
-            NumericeOp::Lt => ($lhs < $rhs) as i32 as $type,
-            NumericeOp::Max => $lhs.max($rhs),
-            NumericeOp::Min => $lhs.min($rhs),
+            NumericeOp::Add => {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = (<$type>::from_ne_bytes(lhs) + <$type>::from_ne_bytes(rhs)).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
+            NumericeOp::Sub =>  {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = (<$type>::from_ne_bytes(lhs) - <$type>::from_ne_bytes(rhs)).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
+            NumericeOp::Mul =>  {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = (<$type>::from_ne_bytes(lhs) * <$type>::from_ne_bytes(rhs)).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
+            NumericeOp::Div =>  {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = (<$type>::from_ne_bytes(lhs) / <$type>::from_ne_bytes(rhs)).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
+            NumericeOp::Rem =>  {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = (<$type>::from_ne_bytes(lhs) % <$type>::from_ne_bytes(rhs)).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
+            // NumericeOp::And =>  {
+            //     let result = <$type>::from_ne_bytes($lhs.try_into().unwrap()) & <$type>::from_ne_bytes($rhs.try_into().unwrap());
+            //     result.to_ne_bytes().to_vec()
+            // }
+            // NumericeOp::Or =>  {
+            //     let result = <$type>::from_ne_bytes($lhs.try_into().unwrap()) | <$type>::from_ne_bytes($rhs.try_into().unwrap());
+            //     result.to_ne_bytes().to_vec()
+            // }
+            // NumericeOp::Xor =>  {
+            //     let result = <$type>::from_ne_bytes($lhs.try_into().unwrap()) ^ <$type>::from_ne_bytes($rhs.try_into().unwrap());
+            //     result.to_ne_bytes().to_vec()
+            // }
+            NumericeOp::Eq => {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = ((<$type>::from_ne_bytes(lhs) == <$type>::from_ne_bytes(rhs)) as u8).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
+            NumericeOp::Neq => {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = ((<$type>::from_ne_bytes(lhs) != <$type>::from_ne_bytes(rhs)) as u8).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
+            NumericeOp::Gte => {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = ((<$type>::from_ne_bytes(lhs) >= <$type>::from_ne_bytes(rhs)) as u8).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
+            NumericeOp::Gt => {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = ((<$type>::from_ne_bytes(lhs) > <$type>::from_ne_bytes(rhs)) as u8).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
+            NumericeOp::Lte => {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = ((<$type>::from_ne_bytes(lhs) <= <$type>::from_ne_bytes(rhs)) as u8).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
+            NumericeOp::Lt => {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = ((<$type>::from_ne_bytes(lhs) < <$type>::from_ne_bytes(rhs)) as u8).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
+            NumericeOp::Max => {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = (<$type>::from_ne_bytes(lhs).max(<$type>::from_ne_bytes(rhs))).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
+            NumericeOp::Min => {
+                let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
+                $state.stack.truncate($state.stack.len() - size_of::<$type>());
+                let result = (<$type>::from_ne_bytes(lhs).min(<$type>::from_ne_bytes(rhs))).to_ne_bytes();
+                for i in result {
+                    $state.stack.push(i);
+                }
+            }
             operation => {
                 return Err(SemanticError::IncorrectOperation {
                     operation: operation,
@@ -1321,93 +1663,71 @@ macro_rules! perform_operation {
                 })?
             }
         }
+        // match $operation {
+        //     NumericeOp::Add => unsafe {
+        //         let result = transmute::<&[u8], $type>($lhs) + transmute::<&[u8], $type>($rhs);
+        //         transmute::<$type, &[u8]>(result)
+        //     }
+        //     NumericeOp::Sub =>  unsafe {
+        //         let result = transmute::<&[u8], $type>($lhs) - transmute::<&[u8], $type>($rhs);
+        //         transmute::<$type, &[u8]>(result)
+        //     }
+        //     NumericeOp::Mul =>  unsafe {
+        //         let result = transmute::<&[u8], $type>($lhs) * transmute::<&[u8], $type>($rhs);
+        //         transmute::<$type, &[u8]>(result)
+        //     }
+        //     NumericeOp::Div =>  unsafe {
+        //         let result = transmute::<&[u8], $type>($lhs) / transmute::<&[u8], $type>($rhs);
+        //         transmute::<$type, &[u8]>(result)
+        //     }
+        //     NumericeOp::Rem =>  unsafe {
+        //         let result = transmute::<&[u8], $type>($lhs) % transmute::<&[u8], $type>($rhs);
+        //         transmute::<$type, &[u8]>(result)
+        //     }
+        //     // NumericeOp::Eq => ($lhs == $rhs) as i32 as $type,
+        //     // NumericeOp::Neq => ($lhs != $rhs) as i32 as $type,
+        //     // NumericeOp::Gte => ($lhs >= $rhs) as i32 as $type,
+        //     // NumericeOp::Gt => ($lhs > $rhs) as i32 as $type,
+        //     // NumericeOp::Lte => ($lhs <= $rhs) as i32 as $type,
+        //     // NumericeOp::Lt => ($lhs < $rhs) as i32 as $type,
+        //     // NumericeOp::Max => $lhs.max($rhs),
+        //     // NumericeOp::Min => $lhs.min($rhs),
+        //     operation => {
+        //         return Err(SemanticError::IncorrectOperation {
+        //             operation: operation,
+        //             val_type: "float".to_string(),
+        //         })?
+        //     }
+        // }
     };
 }
 
 fn process_numerical_op(
     state: &mut MachineState,
-    node_type: NumericType,
+    num_type: NumericType,
     operation: NumericeOp,
 ) -> Result<(), Error> {
-    let rhs = state
-        .stack
-        .pop()
-        .expect("Tried popping from empty stack during numerical operation");
-    let lhs = state
-        .stack
-        .pop()
-        .expect("Tried popping from empty stack during numerical operation");
-
-    match node_type {
+    match num_type {
         NumericType::I32 => {
-            if let (StackValue::I32(rhs_val), StackValue::I32(lhs_val)) = (rhs, lhs) {
-                state.stack.push(StackValue::I32(perform_operation!(
-                    for int i32,
-                    operation, rhs_val, lhs_val
-                )))
-            } else {
-                return Err(RuntimeError::MismatchLhsRhs { lhs: lhs, rhs: rhs })?;
-            }
+            perform_operation!(for int i32, operation, state)
         }
         NumericType::I64 => {
-            if let (StackValue::I64(rhs_val), StackValue::I64(lhs_val)) = (rhs, lhs) {
-                state.stack.push(StackValue::I64(perform_operation!(
-                    for int i64,
-                    operation, rhs_val, lhs_val
-                )))
-            } else {
-                return Err(RuntimeError::MismatchLhsRhs { lhs: lhs, rhs: rhs })?;
-            }
+            perform_operation!(for int i64, operation, state)
         }
         NumericType::I16 => {
-            if let (StackValue::I16(rhs_val), StackValue::I16(lhs_val)) = (rhs, lhs) {
-                state.stack.push(StackValue::I16(perform_operation!(
-                    for int i16,
-                    operation, rhs_val, lhs_val
-                )))
-            } else {
-                return Err(RuntimeError::MismatchLhsRhs { lhs: lhs, rhs: rhs })?;
-            }
+            perform_operation!(for int i16, operation, state)
         }
         NumericType::I8 => {
-            if let (StackValue::I8(rhs_val), StackValue::I8(lhs_val)) = (rhs, lhs) {
-                state.stack.push(StackValue::I8(perform_operation!(
-                    for int i8,
-                    operation, rhs_val, lhs_val
-                )))
-            } else {
-                return Err(RuntimeError::MismatchLhsRhs { lhs: lhs, rhs: rhs })?;
-            }
+            perform_operation!(for int i8, operation, state)
         }
         NumericType::F32 => {
-            if let (StackValue::F32(rhs_val), StackValue::F32(lhs_val)) = (rhs, lhs) {
-                state.stack.push(StackValue::F32(perform_operation!(
-                    for float f32,
-                    operation, rhs_val, lhs_val
-                )))
-            } else {
-                return Err(RuntimeError::MismatchLhsRhs { lhs: lhs, rhs: rhs })?;
-            }
+            perform_operation!(for float f32, operation, state)
         }
         NumericType::F64 => {
-            if let (StackValue::F64(rhs_val), StackValue::F64(lhs_val)) = (rhs, lhs) {
-                state.stack.push(StackValue::F64(perform_operation!(
-                    for float f64,
-                    operation, rhs_val, lhs_val
-                )))
-            } else {
-                return Err(RuntimeError::MismatchLhsRhs { lhs: lhs, rhs: rhs })?;
-            }
+            perform_operation!(for float f64, operation, state)
         }
         NumericType::I128 => {
-            if let (StackValue::I64(rhs_val), StackValue::I64(lhs_val)) = (rhs, lhs) {
-                state.stack.push(StackValue::I64(perform_operation!(
-                    for int i64,
-                    operation, rhs_val, lhs_val
-                )))
-            } else {
-                return Err(RuntimeError::MismatchLhsRhs { lhs: lhs, rhs: rhs })?;
-            }
+            perform_operation!(for int i128, operation, state)
         }
     }
     Ok(())

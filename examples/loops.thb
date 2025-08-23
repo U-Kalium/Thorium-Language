@@ -6,19 +6,18 @@ func $start "_start" :
 func $main:
     declare %while_number
     i64 push 0
-    set %while_number
+    i64 set %while_number
 @beginLoopL4C10
-    get %while_number
+    i64 get %while_number
     i64 push 10000000
     i64 lte
-    cast i8
     jpz "endLoopL4C10"
-    get %while_number
+    i64 get %while_number
     i64 push 1
     i64 add
-    set %while_number
+    i64 set %while_number
     i8 push 1
     jmp "beginLoopL4C10"
 @endLoopL4C10
-    get %while_number
+    i64 get %while_number
 endfunc

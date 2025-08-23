@@ -49,8 +49,8 @@ impl From<RuntimeError> for Error {
 fn main() -> Result<(), Error>{
     let command_line_args: Vec<String> = env::args().collect();
 
-    let file_name = &command_line_args[1];
-    // let file_name = "examples/loops.thb";
+    // let file_name = &command_line_args[1];
+    let file_name = "examples/loops.thb";
     // let file_content = fs::read_to_string(command_line_args[1].clone())
     //     .expect("Should have been able to read the file");
 
@@ -74,7 +74,7 @@ fn main() -> Result<(), Error>{
     // println!("returned: {:?}", state.run())
 }
 
-pub fn tokenize_and_run(byte_code: String) -> Result<(Vec<StackValue>, HashMap<String, usize>, Vec<StackValue>), Error> {
+pub fn tokenize_and_run(byte_code: String) -> Result<(Vec<u8>, HashMap<String, usize>, Vec<i128>), Error> {
     let mut tokens = tokenize(byte_code).unwrap();
     run(&mut tokens)
 }
