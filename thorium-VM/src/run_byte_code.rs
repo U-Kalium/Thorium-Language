@@ -1274,7 +1274,9 @@ macro_rules! perform_operation {
                 let lhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
                 $state.stack.truncate($state.stack.len() - size_of::<$type>());
                 let result = (<$type>::from_ne_bytes(lhs) + <$type>::from_ne_bytes(rhs)).to_ne_bytes();
-                $state.stack.extend_from_slice(&result)
+                for i in result {
+                    $state.stack.push(i);
+                }
             }
             NumericeOp::Sub =>  {
                 let rhs = $state.stack.last_chunk::<{size_of::<$type>()}>().unwrap().clone();
