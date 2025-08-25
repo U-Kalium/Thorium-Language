@@ -8,13 +8,11 @@ use crate::run_byte_code::{run, MemoryErrors, RuntimeError, SemanticError, Stack
 // use crate::runner::State;
 use crate::tokenizer::tokenize;
 
-// mod parser;
-// mod runner;
-// mod syntax_tree;
 mod tokenizer;
 #[cfg(test)]
 mod tests;
 mod run_byte_code;
+
 
 #[derive(Debug)]
 pub enum Error {

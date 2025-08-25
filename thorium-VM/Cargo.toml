@@ -4,5 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+cranelift = "0.123.1"
+cranelift-jit = "0.123.1"
+cranelift-module = "0.123.1"
 hashbrown = "0.15.5"
 thorium-macros = { path = "../thorium-macros"}

@@ -609,20 +609,6 @@ enum NumericType {
     F64,
 }
 
-impl NumericType {
-    fn size(&self) -> usize {
-        match self {
-            NumericType::I128 => size_of::<i128>(),
-            NumericType::I64 => size_of::<i64>(),
-            NumericType::I32 => size_of::<i32>(),
-            NumericType::I16 => size_of::<i16>(),
-            NumericType::I8 => size_of::<i8>(),
-            NumericType::F32 => size_of::<f32>(),
-            NumericType::F64 => size_of::<f64>(),
-        }
-    }
-}
-
 fn run_variable_decleration(
     tokens_iter: &mut TokenIter,
     state: &mut MachineState,
