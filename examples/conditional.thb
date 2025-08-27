@@ -5,7 +5,7 @@ func $start "_start" :
 
 func $main:
     declare %a
-    i32 push 11
+    i32 push 12
     set %a
     declare %b
     i32 push 12
@@ -14,34 +14,31 @@ func $main:
     get %b
     i32 eq
     cast i8
-    jpz "elseL4C5"
-    i32 push 1
-    return
-    i8 push 1
-    jmp "ifendL4C5"
-@elseL4C5
+    jmp "ifL4C5"
     get %a
     i32 push 10
     i32 eq
     cast i8
-    jpz "elseL6C12"
-    i32 push 2
-    return
-    i8 push 1
-    jmp "ifendL6C12"
-@elseL6C12
+    jmp "ifL6C12"
     declare %c
     i8 push 0    set %c
     get %c
-    jpz "elseL10C9"
+    jmp "ifL10C9"
+@ifL10C9
     i32 push 3
     return
-    i8 push 1
-    jmp "ifendL10C9"
-@elseL10C9
-@ifendL10C9
-@ifendL6C12
-@ifendL4C5
+    jmp "mergeL10C9"
+@mergeL10C9
+    jmp "mergeL4C5"
+@ifL6C12
+    i32 push 2
+    return
+    jmp "mergeL4C5"
+@ifL4C5
+    i32 push 1
+    return
+    jmp "mergeL4C5"
+@mergeL4C5
     i32 push 4
     return
 endfunc

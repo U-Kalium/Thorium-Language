@@ -383,6 +383,7 @@ impl Parser {
             // token: &'a Token,
             scope_return_type: TypeDescription,
             statement: &mut String,
+            maybe_merge_label: Option<String>
         ) {
             tokens.next();
             let peeked = tokens.peek().unwrap();
@@ -395,9 +396,16 @@ impl Parser {
                     token,
                     scope_return_type,
                     statement,
+                    maybe_merge_label
                 );
             } else {
-                statement.push_str(&parser.parse_scope(tokens, scope_return_type, variables))
+                statement.push_str(&parser.parse_scope(tokens, scope_return_type, variables));
+                statement.push_str(&format!("    jmp \"{}\"\n", &maybe_merge_label.clone().unwrap()));
+                // if let Else = tokens.peek().unwrap().token_type {
+
+                // } else {
+                //     statement.push_str(&format!("@{}\n", &maybe_merge_label.unwrap()));
+                // }
             }
         }
         fn parse_if(
@@ -407,6 +415,7 @@ impl Parser {
             token: Token,
             scope_return_type: TypeDescription,
             statement: &mut String,
+            maybe_merge_label: Option<String>
         ) {
             let expression = parser.parse_expression(tokens, variables, TypeDescription::bool());
             if expression.expression_type._type != TypeDef::Boolean {
@@ -416,21 +425,30 @@ impl Parser {
                 )
             }
             statement.push_str(&expression.byte_code);
+            let mut final_if = false;
 
             let scope = parser.parse_scope(tokens, scope_return_type.clone(), variables);
+            let merge_label;
+            if let Some(label) = maybe_merge_label {
+                merge_label = label
+            } else {
+                final_if = true;
+                merge_label = format!("mergeL{}C{}", token.line, token.column);
+            }
 
-            let end_if_label = format!("ifendL{}C{}", token.line, token.column);
-            let else_label = format!("elseL{}C{}", token.line, token.column);
-            statement.push_str(&format!("    jpz \"{else_label}\"\n"));
-            statement.push_str(&scope);
-            statement.push_str(&format!("    i8 push 1\n"));
-            statement.push_str(&format!("    jmp \"{end_if_label}\"\n"));
-            statement.push_str(&format!("@{else_label}\n"));
+            let if_label = format!("ifL{}C{}", token.line, token.column);
+            statement.push_str(&format!("    jmp \"{if_label}\"\n"));
             let else_token = tokens.peek().unwrap();
             if let Else = else_token.token_type {
-                parse_else(parser, tokens, variables, scope_return_type, statement);
+                parse_else(parser, tokens, variables, scope_return_type, statement, Some(merge_label.clone()));
+
             }
-            statement.push_str(&format!("@{end_if_label}\n"));
+            statement.push_str(&format!("@{if_label}\n"));  
+            statement.push_str(&scope);
+            statement.push_str(&format!("    jmp \"{}\"\n", merge_label.clone()));
+            if final_if {
+                statement.push_str(&format!("@{}\n", merge_label));                
+            }
         }
         fn parse_declaration(
             parser: &mut Parser,
@@ -562,6 +580,7 @@ impl Parser {
                     );
                 }
                 statement.push_str(&expression.byte_code);
+                statement.push_str("    return\n");
             }
             Return => {
                 tokens.next();
@@ -587,6 +606,7 @@ impl Parser {
                     token,
                     scope_return_type,
                     &mut statement,
+                    None
                 );
             }
             Loop => {
