@@ -1,4 +1,4 @@
-
+clear_cont
 func $start "_start" :
     call $main
     return

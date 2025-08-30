@@ -1,11 +1,6 @@
-
-func $start "_start" :
-    call $main
-    return
-
 func $main:
     declare %a
-    i32 push 12
+    i32 push 1
     set %a
     declare %b
     i32 push 12
@@ -42,3 +37,7 @@ func $main:
     i32 push 4
     return
 endfunc
+
+func $start "_start" :
+    call $main
+    return

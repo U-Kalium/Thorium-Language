@@ -249,22 +249,22 @@ impl MachineState {
     }
 }
 
-struct TokenIter {
+pub struct TokenIter {
     // tokens: Vec<Token>,
-    index: usize,
+    pub index: usize,
 }
 impl TokenIter {
-    fn next<'a>(&mut self, tokens: &'a Vec<Token>) -> &'a Token {
+    pub fn next<'a>(&mut self, tokens: &'a Vec<Token>) -> &'a Token {
         self.index += 1;
         &tokens[self.index]
     }
-    fn current<'a>(&mut self, tokens: &'a Vec<Token>) -> &'a Token {
+    pub fn current<'a>(&mut self, tokens: &'a Vec<Token>) -> &'a Token {
         &tokens[self.index]
     }
-    fn reset(&mut self) {
+    pub fn reset(&mut self) {
         self.index = 0
     }
-    fn peek<'a>(&mut self, tokens: &'a Vec<Token>) -> &'a Token {
+    pub fn peek<'a>(&mut self, tokens: &'a Vec<Token>) -> &'a Token {
         &tokens[self.index + 1]
     }
 }
@@ -867,8 +867,8 @@ fn run_func(
     Ok(())
 }
 
-#[derive(Debug)]
-enum NumericType {
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub enum NumericType {
     I128,
     I64,
     I32,
@@ -1092,7 +1092,7 @@ fn run_numeric_instruction(
     }
 }
 
-fn parse_float32(
+pub fn parse_float32(
     token_iter: &mut TokenIter,
     whole_part: i128,
     tokens: &Vec<Token>,
@@ -1119,7 +1119,7 @@ fn parse_float32(
         .into());
     }
 }
-fn parse_float64(
+pub fn parse_float64(
     token_iter: &mut TokenIter,
     whole_part: i128,
     tokens: &Vec<Token>,
@@ -1197,7 +1197,7 @@ fn print_memory(state: &mut MachineState) {
     println!("Memory: {:?}", state.memory)
 }
 
-fn find_funcs(
+pub fn find_funcs(
     tokens_iter: &mut TokenIter,
     state: &mut MachineState,
     tokens: &Vec<Token>,
@@ -1259,7 +1259,7 @@ fn find_funcs(
 }
 
 #[derive(Debug)]
-enum NumericeOp {
+pub enum NumericeOp {
     Add,
     Sub,
     Mul,

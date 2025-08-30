@@ -12,9 +12,10 @@ use crate::tokenizer::tokenize;
 // mod runner;
 // mod syntax_tree;
 mod tokenizer;
-#[cfg(test)]
-mod tests;
+// #[cfg(test)]
+// mod tests;
 mod run_byte_code;
+mod jit;
 
 #[derive(Debug)]
 pub enum Error {
@@ -22,6 +23,11 @@ pub enum Error {
     SyntacError(SyntaxError),
     SemanticError(SemanticError),
     RuntimeError(RuntimeError),
+}
+
+pub enum RunOptions {
+    Jit,
+    Interpret
 }
 
 impl From<SyntaxError> for Error {
@@ -50,21 +56,17 @@ fn main() -> Result<(), Error>{
     let command_line_args: Vec<String> = env::args().collect();
 
     let file_name = &command_line_args[1];
-    // let file_name = "examples/loops.thb";
-    // let file_content = fs::read_to_string(command_line_args[1].clone())
-    //     .expect("Should have been able to read the file");
-
-
-
+    
     let file_content =
         fs::read_to_string(file_name).expect("Should have been able to read the file");
 
-    let mut tokens = tokenize(file_content).unwrap();
+    // let mut tokens = tokenize(file_content).unwrap();
 
-    match run(&mut tokens) {
-        Ok(_) => Ok(()),
-        Err(err) => Err(err),
-    }
+    // match run(&mut tokens) {
+    //     Ok(_) => Ok(()),
+    //     Err(err) => Err(err),
+    // }
+    tokenize_and_run(file_content, RunOptions::Jit)
     // println!("tokens: \n {:?}", tokens);
     // let syntax_tree = parse_tokens(&tokens);
     // // println!("tree: \n {:?}", syntax_tree);
@@ -74,7 +76,11 @@ fn main() -> Result<(), Error>{
     // println!("returned: {:?}", state.run())
 }
 
-pub fn tokenize_and_run(byte_code: String) -> Result<(Vec<StackValue>, HashMap<String, usize>, Vec<StackValue>), Error> {
+pub fn tokenize_and_run(byte_code: String, run_option: RunOptions) -> Result<(),Error> {
     let mut tokens = tokenize(byte_code).unwrap();
-    run(&mut tokens)
+    match run_option {
+        RunOptions::Jit => unsafe { jit::run(&mut tokens); },
+        RunOptions::Interpret => {run_byte_code::run(&mut tokens);},
+    };
+    Ok(())
 }

@@ -1,7 +1,13 @@
-func $start "_start" :
-    call $main
+func $main:
+    declare %a
+    i64 push 420
+    set %a
+    i64 push 69
+    return
 endfunc
 
-func $main:
-   i64 push 420
+
+func $start "_start" :
+    call $main
+    return
 endfunc
