@@ -1,10 +1,5 @@
-clear_cont
-func $start "_start" :
-    call $main
-    return
-
 func $main:
-    declare %while_number
+    i64 declare %while_number
     i64 push 0
     set %while_number
 @beginLoopL4C10
@@ -21,4 +16,10 @@ func $main:
     jmp "beginLoopL4C10"
 @endLoopL4C10
     get %while_number
+    return
+endfunc
+
+func $start "_start" :
+    call $main
+    return
 endfunc

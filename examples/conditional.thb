@@ -1,8 +1,8 @@
 func $main:
-    declare %a
+    i32 declare %a
     i32 push 1
     set %a
-    declare %b
+    i32 declare %b
     i32 push 12
     set %b
     get %a
@@ -15,7 +15,7 @@ func $main:
     i32 eq
     cast i8
     jmp "ifL6C12"
-    declare %c
+    i32 declare %c
     i8 push 0    set %c
     get %c
     jmp "ifL10C9"

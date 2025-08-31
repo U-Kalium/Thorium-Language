@@ -138,7 +138,7 @@ impl JIT {
         tokens: &mut Vec<Token>,
         tokens_iter: &mut TokenIter,
     ) -> Result<*const u8, Error> {
-        // find funcs 
+        // find funcs
         self.compile_funcs(tokens, tokens_iter)?;
         let start_func_id = self.functions.get(&"start".to_string()).unwrap();
         let code = self.module.get_finalized_function(*start_func_id);
@@ -241,6 +241,9 @@ impl<'a> FunctionTranslater<'a> {
             match &token.token_type {
                 LabelIdent(ident) => {
                     let block = blocks.get(ident).unwrap();
+                    if !matches!(tokens[tokens_iter.index - 2].token_type, Word(Jmp) | Word(Jpz)) {
+                        builder.ins().jump(*block, &[]);
+                    }
                     builder.switch_to_block(*block);
                     current_block = &ident;
                     // builder.seal_block(*prev_block);
@@ -284,12 +287,20 @@ impl<'a> FunctionTranslater<'a> {
                 }
                 Word(Jmp) => {
                     token = tokens_iter.next(tokens);
-                    builder.seal_block(*blocks.get(current_block).unwrap());
-                    let else_block = builder.create_block();
+                    // builder.seal_block(*blocks.get(current_block).unwrap());
+                    let else_block;
+                    let mut should_switch = true;
                     let block_name = format!("elseL{}C{}", token.line, token.column);
+                    if let LabelIdent(ref ident) = tokens_iter.peek(tokens).token_type {
+                        else_block = *blocks.get(ident).unwrap();
+                        should_switch = false
+                    } else {
+                        else_block = builder.create_block();
+                        blocks.insert(block_name, else_block);
+                    }
+
                     // // let binding = &block_name;
                     // blocks.insert(, else_block);
-                    blocks.insert(block_name, else_block);
 
                     let condition = self.stack.pop().unwrap();
                     match &token.token_type {
@@ -304,30 +315,45 @@ impl<'a> FunctionTranslater<'a> {
                         }
                         _ => panic!("expected stringlit or token index"),
                     }
-                    builder.switch_to_block(else_block);
-                    builder.seal_block(else_block);
+                    if should_switch {
+                        builder.switch_to_block(else_block);
+                        // builder.seal_block(else_block);
+                    }
                 }
                 Word(Jpz) => {
                     token = tokens_iter.next(tokens);
-                    builder.seal_block(*blocks.get(current_block).unwrap());
-                    let else_block = builder.create_block();
-                    blocks.insert(format!("elseL{}C{}", token.line, token.column), else_block);
+                    // builder.seal_block(*blocks.get(current_block).unwrap());
+                    let else_block;
+                    let mut should_switch = true;
+                    let block_name = format!("elseL{}C{}", token.line, token.column);
+                    if let LabelIdent(ref ident) = tokens_iter.peek(tokens).token_type {
+                        else_block = *blocks.get(ident).unwrap();
+                        should_switch = false
+                    } else {
+                        else_block = builder.create_block();
+                        blocks.insert(block_name, else_block);
+                    }
+
+                    // // let binding = &block_name;
+                    // blocks.insert(, else_block);
 
                     let condition = self.stack.pop().unwrap();
                     match &token.token_type {
                         StringLit(ident) => {
-                            let if_block = blocks.get(ident).unwrap();
+                            let if_block = blocks.get(ident).cloned().unwrap();
                             builder
                                 .ins()
-                                .brif(condition, else_block, &[], *if_block, &[]);
+                                .brif(condition, else_block, &[], if_block, &[]);
                         }
                         TokenIndex(index) => {
                             todo!()
                         }
                         _ => panic!("expected stringlit or token index"),
                     }
-                    builder.switch_to_block(else_block);
-                    builder.seal_block(else_block);
+                    if should_switch {
+                        builder.switch_to_block(else_block);
+                        // builder.seal_block(else_block);
+                    }
                 }
                 Word(I128) => {
                     self.compile_numeric_instruction(
@@ -385,21 +411,7 @@ impl<'a> FunctionTranslater<'a> {
                         &mut builder,
                     )?;
                 }
-                Word(Declare) => {
-                    while matches!(tokens_iter.peek(tokens).token_type, VarIdent(_)) {
-                        token = tokens_iter.next(tokens);
-                        if let VarIdent(ident) = &token.token_type {
-                            let var = Variable::new(*self.variable_index);
-                            self.variables.insert(ident.clone(), var);
-                            *self.variable_index += 1;
-                        } else {
-                            return Err(SyntaxError::Expected {
-                                expected_token: "variable ident".to_string(),
-                                found: token.clone(),
-                            })?;
-                        }
-                    }
-                }
+
                 Word(Set) => {
                     let peeked = tokens_iter.peek(tokens);
                     if let Word(Stack) = peeked.token_type {
@@ -455,7 +467,32 @@ impl<'a> FunctionTranslater<'a> {
                     }
                 }
                 Word(Cpy) => todo!(),
-                Word(Cast) => todo!(),
+                Word(Cast) => {
+                    token = tokens_iter.next(tokens);
+                    match &token.token_type {
+                        Word(I8) => {
+                            let val = self.stack.pop().unwrap();
+                            let new_val = builder.ins().bitcast(types::I8, MemFlags::new(), val);
+                            self.stack.push(new_val);
+                        }
+                        Word(I16) => {
+                            let val = self.stack.pop().unwrap();
+                            let new_val = builder.ins().bitcast(types::I16, MemFlags::new(), val);
+                            self.stack.push(new_val);
+                        }
+                        Word(I32) => {
+                            let val = self.stack.pop().unwrap();
+                            let new_val = builder.ins().bitcast(types::I32, MemFlags::new(), val);
+                            self.stack.push(new_val);
+                        }
+                        Word(I64) => {
+                            let val = self.stack.pop().unwrap();
+                            let new_val = builder.ins().bitcast(types::I64, MemFlags::new(), val);
+                            self.stack.push(new_val);
+                        }
+                        _ => panic!("Expected castble type")
+                    }
+                },
                 _ => {
                     return Err(SyntaxError::Expected {
                         expected_token: "function instruction".to_string(),
@@ -465,16 +502,15 @@ impl<'a> FunctionTranslater<'a> {
             }
         }
 
-        // builder.seal_all_blocks();
-        // dbg!(&context.func.layout);
+        builder.seal_all_blocks();
         builder.finalize();
-        let func_id = self.module
+        let func_id = self
+            .module
             .declare_function(func_ident, Linkage::Export, &context.func.signature)
             .map_err(|e| panic!("{}", e.to_string()))
             .unwrap();
 
         self.functions.insert(func_ident.to_string(), func_id);
-
 
         self.module
             .define_function(func_id, &mut context)
@@ -494,6 +530,42 @@ impl<'a> FunctionTranslater<'a> {
     ) -> Result<(), Error> {
         let mut token = tokens_iter.next(tokens);
         match token.token_type {
+            Word(Declare) => {
+                while matches!(tokens_iter.peek(tokens).token_type, VarIdent(_)) {
+                    token = tokens_iter.next(tokens);
+                    if let VarIdent(ident) = &token.token_type {
+                        let var = Variable::new(*self.variable_index);
+                        match num_type {
+                            NumericType::I128 => todo!(),
+                            NumericType::I64 => {
+                                builder.declare_var(var, types::I64);
+                            }
+                            NumericType::I32 => {
+                                builder.declare_var(var, types::I32);
+                            }
+                            NumericType::I16 => {
+                                builder.declare_var(var, types::I16);
+                            }
+                            NumericType::I8 => {
+                                builder.declare_var(var, types::I8);
+                            }
+                            NumericType::F32 => {
+                                builder.declare_var(var, types::F32);
+                            }
+                            NumericType::F64 => {
+                                builder.declare_var(var, types::F64);
+                            }
+                        }
+                        self.variables.insert(ident.clone(), var);
+                        *self.variable_index += 1;
+                    } else {
+                        return Err(SyntaxError::Expected {
+                            expected_token: "variable ident".to_string(),
+                            found: token.clone(),
+                        })?;
+                    }
+                }
+            }
             Word(Push) => {
                 while matches!(tokens_iter.peek(tokens).token_type, Number(_)) {
                     token = tokens_iter.next(tokens);

@@ -1,8 +1,9 @@
 func $main:
-    declare %a
+    i64 declare %a
     i64 push 420
+    @labeltest
     set %a
-    i64 push 69
+    get %a
     return
 endfunc
 
