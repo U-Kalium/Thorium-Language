@@ -1,8 +1,11 @@
+func $main:
+    i64 push 1
+    i64 push 2
+    return
+endfunc
+
 
 func $start "_start" :
     call $main
     return
-
-func $main:
-    i32 push 420
 endfunc

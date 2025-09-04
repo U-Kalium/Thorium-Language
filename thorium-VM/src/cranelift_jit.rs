@@ -466,7 +466,96 @@ impl<'a> FunctionTranslater<'a> {
                         }
                     }
                 }
-                Word(Cpy) => todo!(),
+                Word(Cpy) => {
+                    todo!();
+                    token = tokens_iter.next(tokens);
+                    let mut pointer;
+                    match &token.token_type {
+                        Number(num) => pointer = builder.ins().iconst(types::I64, *num as i64),
+                        VarIdent(ident) => {
+                            if let Some(var) = self.variables.get(ident) {
+                                pointer = builder.use_var(*var)
+                            }
+                        }
+                        Word(Top) => pointer = builder.ins().iconst(types::I64, (self.stack.len() - 1) as i64),
+                        _ => {
+                            return Err(SyntaxError::Expected {
+                                expected_token: "number for pointer".to_string(),
+                                found: token.clone(),
+                            })?;
+                        }
+                    }
+                    let peeked = tokens_iter.peek(tokens);
+                    match peeked.token_type {
+                        Plus => {
+                            tokens_iter.next(tokens);
+                            token = tokens_iter.next(tokens);
+                            match &token.token_type {
+                                Number(num) => {
+                                    let number = builder.ins().iconst(types::I64, *num as i64);
+                                    pointer = builder.ins().iadd(number, pointer)
+                                },
+                                Word(Top) => {
+                                    let top_of_stack = self.stack[self.stack.len() - 1];
+                                    pointer = builder.ins().iadd(top_of_stack, pointer)
+                                }
+                                _ => {
+                                    return Err(SyntaxError::Expected {
+                                        expected_token: "number, or top".to_string(),
+                                        found: token.clone(),
+                                    })?;
+                                }
+                            }
+                        }
+                        Minus => {
+                            tokens_iter.next(tokens);
+                            token = tokens_iter.next(tokens);
+                            match &token.token_type {
+                                Number(num) => {
+                                    let number = builder.ins().iconst(types::I64, *num as i64);
+                                    pointer = builder.ins().isub(number, pointer)
+                                },
+                                Word(Top) => {
+                                    let top_of_stack = self.stack[self.stack.len() - 1];
+                                    pointer = builder.ins().isub(top_of_stack, pointer)
+                                }
+                                _ => {
+                                    return Err(SyntaxError::Expected {
+                                        expected_token: "number, or top".to_string(),
+                                        found: token.clone(),
+                                    })?;
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                    token = tokens_iter.next(tokens);
+                    match &token.token_type {
+                        Word(Mem) => {
+                            todo!()
+                        }
+                        VarIdent(ident) => {
+                            // builder.ins().sta
+                        }
+                        Word(Top) => {
+                            // if let Some(stack_value) = state.stack.get(pointer) {
+                            //     let top_index = state.stack.len() - 1;
+                            //     state.stack[top_index] = *stack_value
+                            // } else {
+                            //     return Err(RuntimeError::NoValueFoundAtStackIndex {
+                            //         index: pointer,
+                            //         token: token.clone(),
+                            //     })?;
+                            // }
+                        }
+                        _ => {
+                            return Err(SyntaxError::Expected {
+                                expected_token: "mem or var ident".to_string(),
+                                found: token.clone(),
+                            })?;
+                        }
+                    }
+                },
                 Word(Cast) => {
                     token = tokens_iter.next(tokens);
                     match &token.token_type {
@@ -567,40 +656,75 @@ impl<'a> FunctionTranslater<'a> {
                 }
             }
             Word(Push) => {
-                while matches!(tokens_iter.peek(tokens).token_type, Number(_)) {
+                while matches!(tokens_iter.peek(tokens).token_type, Number(_) | Word(Top)) {
                     token = tokens_iter.next(tokens);
-                    if let Number(num) = token.token_type {
-                        match num_type {
-                            NumericType::I128 => {
-                                todo!()
-                            }
-                            NumericType::I64 => {
-                                let value = builder.ins().iconst(types::I64, num as i64);
-                                self.stack.push(value);
-                            }
-                            NumericType::I32 => {
-                                let value = builder.ins().iconst(types::I32, num as i64);
-                                self.stack.push(value);
-                            }
-                            NumericType::I16 => {
-                                let value = builder.ins().iconst(types::I16, num as i64);
-                                self.stack.push(value);
-                            }
-                            NumericType::I8 => {
-                                let value = builder.ins().iconst(types::I8, num as i64);
-                                self.stack.push(value);
-                            }
-                            NumericType::F32 => {
-                                let float = parse_float32(tokens_iter, num, tokens)?;
-                                let value = builder.ins().f32const(float);
-                                self.stack.push(value);
-                            }
-                            NumericType::F64 => {
-                                let float = parse_float64(tokens_iter, num, tokens)?;
-                                let value = builder.ins().f64const(float);
-                                self.stack.push(value);
+                    match token.token_type {
+                        Number(num) => {
+                            match num_type {
+                                NumericType::I128 => {
+                                    todo!()
+                                }
+                                NumericType::I64 => {
+                                    let value = builder.ins().iconst(types::I64, num as i64);
+                                    self.stack.push(value);
+                                }
+                                NumericType::I32 => {
+                                    let value = builder.ins().iconst(types::I32, num as i64);
+                                    self.stack.push(value);
+                                }
+                                NumericType::I16 => {
+                                    let value = builder.ins().iconst(types::I16, num as i64);
+                                    self.stack.push(value);
+                                }
+                                NumericType::I8 => {
+                                    let value = builder.ins().iconst(types::I8, num as i64);
+                                    self.stack.push(value);
+                                }
+                                NumericType::F32 => {
+                                    let float = parse_float32(tokens_iter, num, tokens)?;
+                                    let value = builder.ins().f32const(float);
+                                    self.stack.push(value);
+                                }
+                                NumericType::F64 => {
+                                    let float = parse_float64(tokens_iter, num, tokens)?;
+                                    let value = builder.ins().f64const(float);
+                                    self.stack.push(value);
+                                }
                             }
                         }
+                        Word(Top) => {
+                            let top = self.stack.len() -1;
+                                match num_type {
+                                NumericType::I128 => {
+                                    todo!()
+                                }
+                                NumericType::I64 => {
+                                    let value = builder.ins().iconst(types::I64, top as i64);
+                                    self.stack.push(value);
+                                }
+                                NumericType::I32 => {
+                                    let value = builder.ins().iconst(types::I32, top as i64);
+                                    self.stack.push(value);
+                                }
+                                NumericType::I16 => {
+                                    let value = builder.ins().iconst(types::I16, top as i64);
+                                    self.stack.push(value);
+                                }
+                                NumericType::I8 => {
+                                    let value = builder.ins().iconst(types::I8, top as i64);
+                                    self.stack.push(value);
+                                }
+                                NumericType::F32 => {
+                                    let value = builder.ins().f32const(top as f32);
+                                    self.stack.push(value);
+                                }
+                                NumericType::F64 => {
+                                    let value = builder.ins().f64const(top as f64);
+                                    self.stack.push(value);
+                                }
+                            }
+                        }
+                        _ => return Err(SyntaxError::Expected { expected_token: "top or number".to_owned(), found: token.clone() })?
                     }
                 }
             }

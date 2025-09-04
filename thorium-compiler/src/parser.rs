@@ -281,7 +281,8 @@ impl Parser {
         // func body
         let mut func_variables = HashMap::new();
         func.push_str(&self.parse_scope(tokens, func_type.returns.clone(), &mut func_variables));
-        func.push_str("endfunc");
+        func.push_str("    return\n");
+        func.push_str("endfunc\n");
 
         self.functions.insert(func_name, func_type);
 
@@ -461,12 +462,13 @@ impl Parser {
             let token = tokens.next().unwrap();
             match &token.token_type {
                 Ident(ident) => {
-                    statement.push_str(&format!("    declare %{ident}\n"));
                     // token = tokens.next().unwrap();
+                     
                     let variable_properties = VariableProperties {
                         variable_type: parser.parse_type(tokens),
                         is_mutable: is_mutable,
                     };
+                    statement.push_str(&format!("   {} declare %{ident}\n", variable_properties.variable_type.strip_modifiers()._type.to_string()));
                     variables.insert(ident.clone(), variable_properties);
                     let peeked_token = tokens.peek().unwrap();
                     match peeked_token.token_type {
@@ -839,6 +841,7 @@ impl Parser {
                             true,
                         ),
                         OpenSquareBracket => {
+                            tokens.next();
                             let index = collect_expr(
                                 TypeDescription::default_int(),
                                 tokens,
@@ -911,6 +914,19 @@ impl Parser {
                                 None,
                             );
                             expr
+                        }
+                        CloseSquareBracket => {
+                            if is_var {
+                                return Expression::Variable(num_or_ident.to_string());
+                            } else {
+                                return Expression::Value {
+                                    expr_type: TypeDescription {
+                                        modifier: ModifierType::None,
+                                        _type: expected_type._type,
+                                    },
+                                    value: Value::Number(num_or_ident.clone()),
+                                };
+                            }
                         }
                         op => todo!("operation: {op:?} not implemented"),
                     };
@@ -1581,14 +1597,7 @@ impl Parser {
 pub fn parse(tokens: &mut TokenIter) -> String {
     let mut parser = Parser::new();
     let mut bin = String::new();
-    bin.push_str(
-        "
-func $start \"_start\" :
-    call $main
-    return
 
-",
-    );
     let peeked_token = tokens.peek().unwrap();
     match &peeked_token.token_type {
         Fn => bin.push_str(parser.parse_func(tokens).as_str()),
@@ -1597,6 +1606,14 @@ func $start \"_start\" :
             peeked_token.line, peeked_token.column
         ),
     }
+    bin.push_str(
+        "
 
+func $start \"_start\" :
+    call $main
+    return
+
+",
+    );
     bin
 }

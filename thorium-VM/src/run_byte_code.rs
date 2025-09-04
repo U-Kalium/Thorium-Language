@@ -1098,7 +1098,7 @@ pub fn parse_float32(
     tokens: &Vec<Token>,
 ) -> Result<f32, Error> {
     let token = token_iter.next(tokens);
-    if matches!(token.token_type, FullStop) {
+    if! matches!(token.token_type, FullStop) {
         return Err(SyntaxError::Expected {
             expected_token: "full stop for float".to_string(),
             found: token.clone(),
@@ -1125,7 +1125,7 @@ pub fn parse_float64(
     tokens: &Vec<Token>,
 ) -> Result<f64, Error> {
     let token = token_iter.next(tokens);
-    if matches!(token.token_type, FullStop) {
+    if !matches!(token.token_type, FullStop) {
         return Err(SyntaxError::Expected {
             expected_token: "full stop for float".to_string(),
             found: token.clone(),

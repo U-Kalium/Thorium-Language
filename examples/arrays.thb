@@ -1,10 +1,5 @@
-
-func $start "_start" :
-    call $main
-    return
-
 func $main:
-    declare %a
+   i64 declare %a
     i64 push 10
     i64 push 9
     i64 push 8
@@ -18,7 +13,7 @@ func $main:
     i64 push 10
     i64 push top
     set %a
-    declare %b
+   i64 declare %b
     i64 push 3
     i64 push 1
     i64 add
@@ -30,14 +25,23 @@ func $main:
     i64 push 4
     i64 eq
     cast i8
-    jpz "elseL10C5"
+    jmp "ifL10C5"
+    get %b
+    return
+    jmp "mergeL10C5"
+@ifL10C5
     i64 push 0
     i64 push 1
     i64 add
     cpy %a - top top
-    i8 push 1
-    jmp "ifendL10C5"
-@elseL10C5
-    get %b
-@ifendL10C5
+    return
+    jmp "mergeL10C5"
+@mergeL10C5
+    return
 endfunc
+
+
+func $start "_start" :
+    call $main
+    return
+

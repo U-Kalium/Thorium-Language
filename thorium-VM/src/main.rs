@@ -15,7 +15,8 @@ mod tokenizer;
 // #[cfg(test)]
 // mod tests;
 mod run_byte_code;
-mod jit;
+mod cranelift_jit;
+mod dynasm_jit;
 
 #[derive(Debug)]
 pub enum Error {
@@ -26,7 +27,8 @@ pub enum Error {
 }
 
 pub enum RunOptions {
-    Jit,
+    CraneliftJit,
+    DynasmJit,
     Interpret
 }
 
@@ -55,8 +57,8 @@ impl From<RuntimeError> for Error {
 fn main() -> Result<(), Error>{
     let command_line_args: Vec<String> = env::args().collect();
 
-    // let file_name = &command_line_args[1];
-    let file_name = "examples/loops.thb";
+    let file_name = &command_line_args[1];
+    // let file_name = "examples/return.thb";
     let file_content =
         fs::read_to_string(file_name).expect("Should have been able to read the file");
 
@@ -66,7 +68,7 @@ fn main() -> Result<(), Error>{
     //     Ok(_) => Ok(()),
     //     Err(err) => Err(err),
     // }
-    tokenize_and_run(file_content, RunOptions::Jit)
+    tokenize_and_run(file_content, RunOptions::DynasmJit)
     // println!("tokens: \n {:?}", tokens);
     // let syntax_tree = parse_tokens(&tokens);
     // // println!("tree: \n {:?}", syntax_tree);
@@ -79,8 +81,9 @@ fn main() -> Result<(), Error>{
 pub fn tokenize_and_run(byte_code: String, run_option: RunOptions) -> Result<(),Error> {
     let mut tokens = tokenize(byte_code).unwrap();
     match run_option {
-        RunOptions::Jit => unsafe { jit::run(&mut tokens); },
+        RunOptions::CraneliftJit => unsafe { cranelift_jit::run(&mut tokens); },
         RunOptions::Interpret => {run_byte_code::run(&mut tokens);},
+        RunOptions::DynasmJit => {dynasm_jit::run(&mut tokens);}
     };
     Ok(())
 }

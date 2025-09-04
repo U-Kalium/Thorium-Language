@@ -226,3 +226,12 @@ loop 10 == 9 {
 loop var i = 0; i < 10; i += 1 {
 
 }
+
+// tagged unions
+
+type MarriageStatus Union {
+    Married(parner)
+}
+
+// anonymouse
+string|u32|Person
