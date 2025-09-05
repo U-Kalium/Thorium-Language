@@ -1612,7 +1612,7 @@ pub fn parse(tokens: &mut TokenIter) -> String {
 func $start \"_start\" :
     call $main
     return
-
+endfunc
 ",
     );
     bin

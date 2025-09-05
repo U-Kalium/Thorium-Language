@@ -6,7 +6,6 @@ func $main:
     get %while_number
     i64 push 10000000
     i64 lte
-    cast i8
     jpz "endLoopL4C10"
     get %while_number
     i64 push 1

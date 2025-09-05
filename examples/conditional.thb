@@ -1,43 +1,46 @@
 func $main:
-    i32 declare %a
-    i32 push 1
+   i64 declare %a
+    i64 push 1
     set %a
-    i32 declare %b
-    i32 push 12
+   i64 declare %b
+    i64 push 12
     set %b
     get %a
     get %b
-    i32 eq
+    i64 eq
     cast i8
     jmp "ifL4C5"
     get %a
-    i32 push 10
-    i32 eq
+    i64 push 10
+    i64 eq
     cast i8
     jmp "ifL6C12"
-    i32 declare %c
+   i8 declare %c
     i8 push 0    set %c
     get %c
     jmp "ifL10C9"
 @ifL10C9
-    i32 push 3
+    i64 push 3
     return
     jmp "mergeL10C9"
 @mergeL10C9
     jmp "mergeL4C5"
 @ifL6C12
-    i32 push 2
+    i64 push 2
     return
     jmp "mergeL4C5"
 @ifL4C5
-    i32 push 1
+    i64 push 1
     return
     jmp "mergeL4C5"
 @mergeL4C5
-    i32 push 4
+    i64 push 4
+    return
     return
 endfunc
+
 
 func $start "_start" :
     call $main
     return
+endfunc

@@ -1,4 +1,4 @@
-use crate::run_byte_code::{parse_float32, parse_float64, NumericeOp, SemanticError, SyntaxError};
+use crate::run_byte_code::{NumericeOp, SemanticError, SyntaxError, parse_float32, parse_float64};
 use crate::tokenizer::{TokenType::*, WordToken::*};
 use dynasmrt::x64::X64Relocation;
 use dynasmrt::*;
@@ -40,7 +40,7 @@ struct Variable {
 #[derive(Debug, Clone)]
 struct Function {
     token_index: usize,
-    dyn_label:DynamicLabel,
+    dyn_label: DynamicLabel,
 }
 
 macro_rules! function_prologue {
@@ -59,7 +59,6 @@ macro_rules! function_epiloge {
         )
     };
 }
-
 
 macro_rules! compile_operation {
     (for int $operation:ident, $ops:ident) => {
@@ -123,50 +122,50 @@ macro_rules! compile_operation {
 
             ),
             NumericeOp::Eq => dynasm!($ops
-                ; pop r10
                 ; pop r11
-                ; cmp r10, r11
+                ; pop r10
                 ; xor r9, r9
+                ; cmp r10, r11
                 ; sete r9b
                 ; push r9
             ),
             NumericeOp::Neq => dynasm!($ops
-                ; pop r10
                 ; pop r11
-                ; cmp r10, r11
+                ; pop r10
                 ; xor r9, r9
+                ; cmp r10, r11
                 ; setne r9b
                 ; push r9
             ),
             NumericeOp::Gte => dynasm!($ops
-                ; pop r10
                 ; pop r11
-                ; cmp r10, r11
+                ; pop r10
                 ; xor r9, r9
+                ; cmp r10, r11
                 ; setge r9b
                 ; push r9
             ),
             NumericeOp::Gt => dynasm!($ops
-                ; pop r10
                 ; pop r11
-                ; cmp r10, r11
+                ; pop r10
                 ; xor r9, r9
+                ; cmp r10, r11
                 ; setg r9b
                 ; push r9
             ),
             NumericeOp::Lte => dynasm!($ops
-                ; pop r10
                 ; pop r11
-                ; cmp r10, r11
+                ; pop r10
                 ; xor r9, r9
+                ; cmp r10, r11
                 ; setle r9b
                 ; push r9
             ),
             NumericeOp::Lt => dynasm!($ops
-                ; pop r10
                 ; pop r11
-                ; cmp r10, r11
+                ; pop r10
                 ; xor r9, r9
+                ; cmp r10, r11
                 ; setl r9b
                 ; push r9
             ),
@@ -194,7 +193,7 @@ pub struct JIT {
     exports: HashMap<String, usize>,
     variables: HashMap<String, Variable>,
     start_offset: Option<AssemblyOffset>,
-    lables: HashMap<String, DynamicLabel>
+    lables: HashMap<String, DynamicLabel>,
 }
 
 impl JIT {
@@ -211,17 +210,15 @@ impl JIT {
         &mut self,
         tokens: &mut Vec<Token>,
         tokens_iter: &mut TokenIter,
-        mut ops: Assembler<X64Relocation>
-    ) -> Result< i64, Error> {
+        mut ops: Assembler<X64Relocation>,
+    ) -> Result<i64, Error> {
         self.collect_funcs(tokens, tokens_iter, &mut ops)?;
         self.compile_funcs(tokens, tokens_iter, &mut ops)?;
         let start_offset = self.start_offset.unwrap();
         // let ops = self.ops;
-    
+
         let buf = ops.finalize().unwrap();
-        let start_fn: extern "C" fn() -> i64 = unsafe {
-            mem::transmute(buf.ptr(start_offset))
-        };
+        let start_fn: extern "C" fn() -> i64 = unsafe { mem::transmute(buf.ptr(start_offset)) };
         let result = (start_fn)();
         Ok(result)
     }
@@ -230,7 +227,7 @@ impl JIT {
         &mut self,
         tokens: &mut Vec<Token>,
         tokens_iter: &mut TokenIter,
-        ops: &mut Assembler<X64Relocation>
+        ops: &mut Assembler<X64Relocation>,
     ) -> Result<(), Error> {
         let mut token = tokens_iter.current(tokens);
         match token.token_type {
@@ -275,7 +272,7 @@ impl JIT {
                 let func_label = ops.new_dynamic_label();
                 let func = Function {
                     token_index: func_index,
-                    dyn_label: func_label
+                    dyn_label: func_label,
                 };
                 self.functions.insert(func_ident.to_string(), func);
                 // self.functions.insert(func_ident.to_string(), func_index);
@@ -297,7 +294,7 @@ impl JIT {
         &mut self,
         tokens: &mut Vec<Token>,
         tokens_iter: &mut TokenIter,
-        ops: &mut Assembler<X64Relocation>
+        ops: &mut Assembler<X64Relocation>,
     ) -> Result<(), Error> {
         for (ident, func) in self.functions.clone() {
             if ident == "start".to_string() {
@@ -305,7 +302,6 @@ impl JIT {
             }
             tokens_iter.index = func.token_index;
             self.compile_func(tokens, tokens_iter, &ident, ops)?;
-            
         }
         Ok(())
     }
@@ -315,19 +311,31 @@ impl JIT {
         tokens: &mut Vec<Token>,
         tokens_iter: &mut TokenIter,
         func_ident: &String,
-        ops: &mut Assembler<X64Relocation>
+        ops: &mut Assembler<X64Relocation>,
     ) -> Result<(), Error> {
         let func = self.functions.get(func_ident).unwrap().clone();
         let variable_space = self.collect_variable_declerations(tokens, tokens_iter)?;
 
         tokens_iter.index = func.token_index;
-        function_prologue!(ops);
         dynasm!(ops
             ; .arch x64
             ; => func.dyn_label
+            ;; function_prologue!(ops)
             ; mov rax, QWORD variable_space as _
             ; sub rsp,  rax
         );
+
+        while !matches!(tokens_iter.peek(tokens).token_type, Word(EndFunc)) {
+            let mut token = tokens_iter.next(tokens);
+            match &token.token_type {
+                LabelIdent(ident) => {
+                    let label = ops.new_dynamic_label();
+                    self.lables.insert(ident.to_owned(), label);
+                }
+                _ => {}
+            }
+        }
+        tokens_iter.index = func.token_index;
 
         while !matches!(tokens_iter.peek(tokens).token_type, Word(EndFunc)) {
             let mut token = tokens_iter.next(tokens);
@@ -348,9 +356,123 @@ impl JIT {
                                 ; push rax
                             )
                         } else {
-                            return Err(SemanticError::UndefinedFunc { ident: token.clone() })?;
+                            return Err(SemanticError::UndefinedFunc {
+                                ident: token.clone(),
+                            })?;
                         }
-                    } 
+                    }
+                }
+                LabelIdent(ident) => {
+                    let label = self.lables.get(ident).unwrap();
+                    dynasm!(ops
+                        ; => *label
+                    )
+                }
+                Word(Set) => {
+                    token = tokens_iter.next(tokens);
+                    if let VarIdent(ident) = &token.token_type {
+                        if let Some(var) = self.variables.get(ident) {
+                            let offset = var.stack_offset as i32;
+                            match var.type_ {
+                                StackType::I128 => todo!(),
+                                StackType::I64 => dynasm!(ops
+                                    ; pop r10
+                                    ; mov [rbp - offset], r10
+                                ),
+                                StackType::I32 => dynasm!(ops
+                                    ; mov r10d, [rsp]
+                                    ; sub rsp, var.type_.size() as i32
+                                    ; mov [rbp - offset], r10d
+                                ),
+                                StackType::I16 => dynasm!(ops
+                                    ; mov r10w, [rsp]
+                                    ; sub rsp, var.type_.size() as i32
+                                    ; mov [rbp - offset], r10w
+                                ),
+                                StackType::I8 => dynasm!(ops
+                                    ; mov r10b, [rsp]
+                                    ; sub rsp, var.type_.size() as i32
+                                    ; mov [rbp - offset], r10b
+                                ),
+                                StackType::F32 => todo!(),
+                                StackType::F64 => todo!(),
+                            }
+                        } else {
+                            return Err(SemanticError::UndefinedVar {
+                                ident: token.clone(),
+                            })?;
+                        }
+                    } else {
+                        return Err(SyntaxError::Expected {
+                            expected_token: "variable ident".to_owned(),
+                            found: token.clone(),
+                        })?;
+                    }
+                }
+                Word(Get) => {
+                    token = tokens_iter.next(tokens);
+                    if let VarIdent(ident) = &token.token_type {
+                        if let Some(var) = self.variables.get(ident) {
+                            dynasm!(ops
+                                ; mov rax, [rbp - var.stack_offset as i32]
+                                ; push rax
+                            );
+                        } else {
+                            return Err(SemanticError::UndefinedVar {
+                                ident: token.clone(),
+                            })?;
+                        }
+                    } else {
+                        return Err(SyntaxError::Expected {
+                            expected_token: "variable ident".to_owned(),
+                            found: token.clone(),
+                        })?;
+                    }
+                }
+                Word(Cast) => {
+                    tokens_iter.next(tokens);
+                }
+                Word(Jpz) => {
+                    token = tokens_iter.next(tokens);
+                    if let StringLit(lit) = &token.token_type {
+                        if let Some(label) = self.lables.get(lit) {
+                            dynasm!(ops
+                                ; pop r10
+                                ; test r10, r10
+                                ; jz =>*label
+                            )
+                        } else {
+                            return Err(SemanticError::UndefindLabel {
+                                ident: token.clone(),
+                            })?;
+                        }
+                    } else {
+                        return Err(SyntaxError::Expected {
+                            expected_token: "string lit for label".to_owned(),
+                            found: token.clone(),
+                        })?;
+                    }
+                }
+                Word(Jmp) => {
+                    token = tokens_iter.next(tokens);
+                    if let StringLit(lit) = &token.token_type {
+                        if let Some(label) = self.lables.get(lit) {
+                            dynasm!(ops
+                                ; pop r10
+                                ; test r10, r10
+                                ; jnz =>*label
+                            )
+                        } else {
+                            return Err(SemanticError::UndefindLabel {
+                                ident: token.clone(),
+                            })?;
+                        }
+                    } else {
+                        return Err(SyntaxError::Expected {
+                            expected_token: "string lit for label".to_owned(),
+                            found: token.clone(),
+                        })?;
+                    }
                 }
                 Word(I128) => {
                     self.compile_numeric_instruction(tokens, tokens_iter, StackType::I128, ops)?
@@ -364,7 +486,9 @@ impl JIT {
                 Word(I16) => {
                     self.compile_numeric_instruction(tokens, tokens_iter, StackType::I16, ops)?
                 }
-                Word(I8) => self.compile_numeric_instruction(tokens, tokens_iter, StackType::I8, ops)?,
+                Word(I8) => {
+                    self.compile_numeric_instruction(tokens, tokens_iter, StackType::I8, ops)?
+                }
                 Word(F64) => {
                     self.compile_numeric_instruction(tokens, tokens_iter, StackType::F64, ops)?
                 }
@@ -388,7 +512,7 @@ impl JIT {
         tokens: &mut Vec<Token>,
         tokens_iter: &mut TokenIter,
         num_type: StackType,
-        ops: &mut Assembler<X64Relocation>
+        ops: &mut Assembler<X64Relocation>,
     ) -> Result<(), Error> {
         let mut token = tokens_iter.next(tokens);
         match token.token_type {
@@ -405,7 +529,7 @@ impl JIT {
                                     let int = num as i64;
                                     dynasm!(ops
                                         ; .arch x64
-                                        ; mov rax, QWORD int 
+                                        ; mov rax, QWORD int
                                         ; push rax
                                     )
                                 }
@@ -440,7 +564,7 @@ impl JIT {
                                         ; f32val:
                                         ; .bytes float.to_ne_bytes()
                                         ; fld DWORD [<f32val]
-                                        ; fstp 
+                                        ; fstp
                                         // ; push float
                                     )
                                 }
@@ -451,7 +575,7 @@ impl JIT {
                                         ; f64val:
                                         ; .bytes float.to_ne_bytes()
                                         ; fld QWORD [<f32val]
-                                        ; fstp 
+                                        ; fstp
                                         // ; push float
                                     )
                                 }
@@ -460,145 +584,152 @@ impl JIT {
                         Word(Top) => {
                             todo!()
                         }
-                        _ => return Err(SyntaxError::Expected { expected_token: "top or number".to_owned(), found: token.clone() })?
+                        _ => {
+                            return Err(SyntaxError::Expected {
+                                expected_token: "top or number".to_owned(),
+                                found: token.clone(),
+                            })?;
+                        }
                     }
                 }
             }
             Word(Add) => {
-                let operation = NumericeOp::Add; 
-                
+                let operation = NumericeOp::Add;
+
                 compile_operation!(for int
                     operation,
                     ops
                 )
-            },
+            }
             Word(Sub) => {
-                let operation = NumericeOp::Sub; 
-                
+                let operation = NumericeOp::Sub;
+
                 compile_operation!(for int
                     operation,
                     ops
                 )
-            },
+            }
             Word(Mul) => {
-                let operation = NumericeOp::Mul; 
-                
+                let operation = NumericeOp::Mul;
+
                 compile_operation!(for int
                     operation,
                     ops
                 )
-            },
+            }
             Word(Div) => {
-                let operation = NumericeOp::Div; 
-                
+                let operation = NumericeOp::Div;
+
                 compile_operation!(for int
                     operation,
                     ops
                 )
-            },
+            }
             Word(Rem) => {
-                let operation = NumericeOp::Rem; 
-                
+                let operation = NumericeOp::Rem;
+
                 compile_operation!(for int
                     operation,
                     ops
                 )
-            },
+            }
             Word(And) => {
-                let operation = NumericeOp::And; 
-                
+                let operation = NumericeOp::And;
+
                 compile_operation!(for int
                     operation,
                     ops
                 )
-            },
+            }
             Word(Or) => {
-                let operation = NumericeOp::Or; 
-                
+                let operation = NumericeOp::Or;
+
                 compile_operation!(for int
                     operation,
                     ops
                 )
-            },
+            }
             Word(Xor) => {
-                let operation = NumericeOp::Xor; 
-                
+                let operation = NumericeOp::Xor;
+
                 compile_operation!(for int
                     operation,
                     ops
                 )
-            },
+            }
             Word(Eq) => {
-                let operation = NumericeOp::Eq; 
-                
+                let operation = NumericeOp::Eq;
+
                 compile_operation!(for int
                     operation,
                     ops
                 )
-            },
+            }
             Word(Neq) => {
-                let operation = NumericeOp::Neq; 
-                
+                let operation = NumericeOp::Neq;
+
                 compile_operation!(for int
                     operation,
                     ops
                 )
-            },
+            }
             Word(Gte) => {
-                let operation = NumericeOp::Gte; 
-                
+                let operation = NumericeOp::Gte;
+
                 compile_operation!(for int
                     operation,
                     ops
                 )
-            },
+            }
             Word(Gt) => {
-                let operation = NumericeOp::Gt; 
-                
+                let operation = NumericeOp::Gt;
+
                 compile_operation!(for int
                     operation,
                     ops
                 )
-            },
+            }
             Word(Lte) => {
-                let operation = NumericeOp::Lte; 
-                
+                let operation = NumericeOp::Lte;
+
                 compile_operation!(for int
                     operation,
                     ops
                 )
-            },
+            }
             Word(Lt) => {
-                let operation = NumericeOp::Lt; 
-                
+                let operation = NumericeOp::Lt;
+
                 compile_operation!(for int
                     operation,
                     ops
                 )
-            },
+            }
             Word(Max) => {
-                let operation = NumericeOp::Max; 
-                
+                let operation = NumericeOp::Max;
+
                 compile_operation!(for int
                     operation,
                     ops
                 )
-            },
+            }
             Word(Min) => {
-                let operation = NumericeOp::Min; 
-                
+                let operation = NumericeOp::Min;
+
                 compile_operation!(for int
                     operation,
                     ops
                 )
-            },
-            _ => todo!()
+            }
+            Word(Declare) => {
+                tokens_iter.next(tokens);
+            }
+
+            _ => todo!("{:?}", token),
         }
         Ok(())
     }
 
-
-    
     fn collect_variable_declerations(
         &mut self,
         tokens: &mut Vec<Token>,
@@ -616,6 +747,7 @@ impl JIT {
                 Word(I64) => {
                     tokens_iter.next(tokens);
                     token = tokens_iter.next(tokens);
+                    total_variable_offset += size_of::<i64>();
                     if let VarIdent(ident) = &token.token_type {
                         let var = Variable {
                             ident: ident.clone(),
@@ -629,11 +761,11 @@ impl JIT {
                             found: token.clone(),
                         })?;
                     }
-                    total_variable_offset += size_of::<i64>();
                 }
                 Word(I32) => {
                     tokens_iter.next(tokens);
                     token = tokens_iter.next(tokens);
+                    total_variable_offset += size_of::<i32>();
                     if let VarIdent(ident) = &token.token_type {
                         let var = Variable {
                             ident: ident.clone(),
@@ -647,11 +779,11 @@ impl JIT {
                             found: token.clone(),
                         })?;
                     }
-                    total_variable_offset += size_of::<i32>();
                 }
                 Word(I16) => {
                     tokens_iter.next(tokens);
                     token = tokens_iter.next(tokens);
+                    total_variable_offset += size_of::<i16>();
                     if let VarIdent(ident) = &token.token_type {
                         let var = Variable {
                             ident: ident.clone(),
@@ -665,11 +797,11 @@ impl JIT {
                             found: token.clone(),
                         })?;
                     }
-                    total_variable_offset += size_of::<i16>();
                 }
                 Word(I8) => {
                     tokens_iter.next(tokens);
                     token = tokens_iter.next(tokens);
+                    total_variable_offset += size_of::<i8>();
                     if let VarIdent(ident) = &token.token_type {
                         let var = Variable {
                             ident: ident.clone(),
@@ -683,11 +815,11 @@ impl JIT {
                             found: token.clone(),
                         })?;
                     }
-                    total_variable_offset += size_of::<i8>();
                 }
                 Word(F64) => {
                     tokens_iter.next(tokens);
                     token = tokens_iter.next(tokens);
+                    total_variable_offset += size_of::<f64>();
                     if let VarIdent(ident) = &token.token_type {
                         let var = Variable {
                             ident: ident.clone(),
@@ -701,11 +833,11 @@ impl JIT {
                             found: token.clone(),
                         })?;
                     }
-                    total_variable_offset += size_of::<f64>();
                 }
                 Word(F32) => {
                     tokens_iter.next(tokens);
                     token = tokens_iter.next(tokens);
+                    total_variable_offset += size_of::<f32>();
                     if let VarIdent(ident) = &token.token_type {
                         let var = Variable {
                             ident: ident.clone(),
@@ -719,7 +851,6 @@ impl JIT {
                             found: token.clone(),
                         })?;
                     }
-                    total_variable_offset += size_of::<f32>();
                 }
                 _ => {}
             }
@@ -729,8 +860,6 @@ impl JIT {
     }
 }
 
-
-
 pub fn run(tokens: &mut Vec<Token>) -> Result<(), Error> {
     let mut ops = Assembler::new().unwrap();
     let mut jit = JIT {
@@ -738,10 +867,10 @@ pub fn run(tokens: &mut Vec<Token>) -> Result<(), Error> {
         exports: HashMap::new(),
         variables: HashMap::new(),
         start_offset: None,
-        lables: HashMap::new()
+        lables: HashMap::new(),
     };
     let mut tokens_iter = TokenIter { index: 0 };
     let result = jit.compile_and_run(tokens, &mut tokens_iter, ops).unwrap();
     println!("dynasm jit result: {result}");
-    Ok(()) 
+    Ok(())
 }
