@@ -401,7 +401,8 @@ impl Parser {
                 );
             } else {
                 statement.push_str(&parser.parse_scope(tokens, scope_return_type, variables));
-                statement.push_str(&format!("    jmp \"{}\"\n", &maybe_merge_label.clone().unwrap()));
+                statement.push_str(&format!("    i8 push 1\n"));
+                statement.push_str(&format!("    i8 jmp \"{}\"\n", &maybe_merge_label.clone().unwrap()));
                 // if let Else = tokens.peek().unwrap().token_type {
 
                 // } else {
@@ -438,15 +439,17 @@ impl Parser {
             }
 
             let if_label = format!("ifL{}C{}", token.line, token.column);
-            statement.push_str(&format!("    jmp \"{if_label}\"\n"));
             let else_token = tokens.peek().unwrap();
             if let Else = else_token.token_type {
+                statement.push_str(&format!("    {} jmp \"{if_label}\"\n", scope_return_type.strip_modifiers()._type.to_string()));
                 parse_else(parser, tokens, variables, scope_return_type, statement, Some(merge_label.clone()));
-
+            } else {
+                statement.push_str(&format!("    {} jpz \"{merge_label}\"\n", expression.expression_type.strip_modifiers()._type.to_string()));
             }
             statement.push_str(&format!("@{if_label}\n"));  
             statement.push_str(&scope);
-            statement.push_str(&format!("    jmp \"{}\"\n", merge_label.clone()));
+            statement.push_str(&format!("    i8 push 1\n"));
+            statement.push_str(&format!("    i8 jmp \"{}\"\n", merge_label.clone()));
             if final_if {
                 statement.push_str(&format!("@{}\n", merge_label));                
             }
@@ -507,13 +510,13 @@ impl Parser {
                 let expression_return =
                     parser.parse_expression(tokens, variables, TypeDescription::bool());
                 statement.push_str(&expression_return.byte_code);
-                statement.push_str(&format!("    jpz \"{end_loop_label}\"\n"));
+                statement.push_str(&format!("    {} jpz \"{end_loop_label}\"\n", expression_return.expression_type.strip_modifiers()._type.to_string()));
 
                 let scope = parser.parse_scope(tokens, scope_return_type, variables);
                 statement.push_str(&scope);
 
                 statement.push_str(&format!("    i8 push 1\n"));
-                statement.push_str(&format!("    jmp \"{begin_loop_label}\"\n"));
+                statement.push_str(&format!("    i8 jmp \"{begin_loop_label}\"\n"));
                 statement.push_str(&format!("@{end_loop_label}\n"));
             }
             fn parse_foreach_loop(

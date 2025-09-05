@@ -1,6 +1,6 @@
 func $main:
    i64 declare %a
-    i64 push 1
+    i64 push 10
     set %a
    i64 declare %b
     i64 push 12
@@ -9,30 +9,34 @@ func $main:
     get %b
     i64 eq
     cast i8
-    jmp "ifL4C5"
+    i64 jmp "ifL4C5"
     get %a
     i64 push 10
     i64 eq
     cast i8
-    jmp "ifL6C12"
+    i64 jmp "ifL6C12"
    i8 declare %c
-    i8 push 0    set %c
+    i8 push 1    set %c
     get %c
-    jmp "ifL10C9"
+    i8 jpz "mergeL10C9"
 @ifL10C9
     i64 push 3
     return
-    jmp "mergeL10C9"
+    i8 push 1
+    i8 jmp "mergeL10C9"
 @mergeL10C9
-    jmp "mergeL4C5"
+    i8 push 1
+    i8 jmp "mergeL4C5"
 @ifL6C12
     i64 push 2
     return
-    jmp "mergeL4C5"
+    i8 push 1
+    i8 jmp "mergeL4C5"
 @ifL4C5
     i64 push 1
     return
-    jmp "mergeL4C5"
+    i8 push 1
+    i8 jmp "mergeL4C5"
 @mergeL4C5
     i64 push 4
     return

@@ -432,48 +432,7 @@ impl JIT {
                 Word(Cast) => {
                     tokens_iter.next(tokens);
                 }
-                Word(Jpz) => {
-                    token = tokens_iter.next(tokens);
-                    if let StringLit(lit) = &token.token_type {
-                        if let Some(label) = self.lables.get(lit) {
-                            dynasm!(ops
-                                ; pop r10
-                                ; test r10, r10
-                                ; jz =>*label
-                            )
-                        } else {
-                            return Err(SemanticError::UndefindLabel {
-                                ident: token.clone(),
-                            })?;
-                        }
-                    } else {
-                        return Err(SyntaxError::Expected {
-                            expected_token: "string lit for label".to_owned(),
-                            found: token.clone(),
-                        })?;
-                    }
-                }
-                Word(Jmp) => {
-                    token = tokens_iter.next(tokens);
-                    if let StringLit(lit) = &token.token_type {
-                        if let Some(label) = self.lables.get(lit) {
-                            dynasm!(ops
-                                ; pop r10
-                                ; test r10, r10
-                                ; jnz =>*label
-                            )
-                        } else {
-                            return Err(SemanticError::UndefindLabel {
-                                ident: token.clone(),
-                            })?;
-                        }
-                    } else {
-                        return Err(SyntaxError::Expected {
-                            expected_token: "string lit for label".to_owned(),
-                            found: token.clone(),
-                        })?;
-                    }
-                }
+
                 Word(I128) => {
                     self.compile_numeric_instruction(tokens, tokens_iter, StackType::I128, ops)?
                 }
@@ -591,6 +550,68 @@ impl JIT {
                             })?;
                         }
                     }
+                }
+            }
+            Word(Jpz) => {
+                token = tokens_iter.next(tokens);
+                if let StringLit(lit) = &token.token_type {
+                    if let Some(label) = self.lables.get(lit) {
+                        match num_type {
+                            StackType::I128 => todo!(),
+                            StackType::I64 => dynasm!(ops
+                                ; pop r10
+                                ; test r10, r10
+                                ; jz => *label
+                            ),
+                            StackType::I32 => dynasm!(ops
+                                ; pop r10
+                                ; test r10d, r10d
+                                ; jz => *label
+                            ),
+                            StackType::I16 => dynasm!(ops
+                                ; pop r10
+                                ; test r10w, r10w
+                                ; jz => *label
+                            ),
+                            StackType::I8 => dynasm!(ops
+                                ; pop r10
+                                ; test r10b, r10b
+                                ; jz => *label
+                            ),
+                            StackType::F32 => todo!(),
+                            StackType::F64 => todo!(),
+                        }
+                    } else {
+                        return Err(SemanticError::UndefindLabel {
+                            ident: token.clone(),
+                        })?;
+                    }
+                } else {
+                    return Err(SyntaxError::Expected {
+                        expected_token: "string lit for label".to_owned(),
+                        found: token.clone(),
+                    })?;
+                }
+            }
+            Word(Jmp) => {
+                token = tokens_iter.next(tokens);
+                if let StringLit(lit) = &token.token_type {
+                    if let Some(label) = self.lables.get(lit) {
+                        dynasm!(ops
+                            ; pop r10
+                            ; test r10, r10
+                            ; jnz =>*label
+                        )
+                    } else {
+                        return Err(SemanticError::UndefindLabel {
+                            ident: token.clone(),
+                        })?;
+                    }
+                } else {
+                    return Err(SyntaxError::Expected {
+                        expected_token: "string lit for label".to_owned(),
+                        found: token.clone(),
+                    })?;
                 }
             }
             Word(Add) => {

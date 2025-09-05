@@ -1,12 +1,12 @@
 fn main() i64 {
-    let a i64 = 1
+    let a i64 = 10
     let b i64 = 12
     if a == b {
         finish 1
     } else if a == 10 {
         finish 2
     } else {
-        let c bool = false 
+        let c bool = true 
         if c {
             finish 3
         }
