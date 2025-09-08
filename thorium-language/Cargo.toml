@@ -1,0 +1,9 @@
+[package]
+name = "thorium-language"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+thorium-macros = { path = "thorium-macros" }
+hashbrown = "0.15.5"
+dynasmrt = "=3.2.1"

@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 
-use crate::tokenizer::TokenType::*;
-use crate::tokenizer::{Token, TokenIter};
+use crate::compiler::tokenizer::TokenType::*;
+use crate::compiler::tokenizer::{Token, TokenIter};
 
 struct FunctionType {
     parems: HashMap<String, String>,

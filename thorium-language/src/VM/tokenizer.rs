@@ -1,3 +1,5 @@
+
+// extern crate thorium_macros;
 use thorium_macros::tokenize_words;
 
 #[derive(Debug, Clone)]

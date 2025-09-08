@@ -1,11 +1,11 @@
-use crate::run_byte_code::{NumericeOp, SemanticError, SyntaxError, parse_float32, parse_float64};
-use crate::tokenizer::{TokenType::*, WordToken::*};
+use crate::VM::run_byte_code::{NumericeOp, SemanticError, SyntaxError, parse_float32, parse_float64};
+use crate::VM::tokenizer::{TokenType::*, WordToken::*};
 use dynasmrt::x64::X64Relocation;
 use dynasmrt::*;
 use hashbrown::HashMap;
 use std::mem;
 
-use crate::{Error, run_byte_code::TokenIter, tokenizer::Token};
+use crate::VM::{Error, run_byte_code::TokenIter, tokenizer::Token};
 
 enum StackType {
     I128,

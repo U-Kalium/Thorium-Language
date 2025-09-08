@@ -3,5 +3,5 @@
 version = 4
 
 [[package]]
-name = "thorium-VM"
+name = "thorium-macros"
 version = "0.1.0"

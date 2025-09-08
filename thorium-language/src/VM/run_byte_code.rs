@@ -1,9 +1,9 @@
 use core::{num, panic};
 use hashbrown::HashMap;
 
-use crate::Error;
-use crate::tokenizer::Token;
-use crate::tokenizer::{TokenType::*, WordToken::*};
+use crate::VM::Error;
+use crate::VM::tokenizer::Token;
+use crate::VM::tokenizer::{TokenType::*, WordToken::*};
 
 const PAGE_SIZE: usize = 8 * 64 * 1024;
 const INITIAL_PAGE_AMOUNT: usize = 1;
