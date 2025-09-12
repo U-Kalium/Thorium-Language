@@ -1,11 +1,11 @@
-use crate::VM::run_byte_code::{NumericeOp, SemanticError, SyntaxError, parse_float32, parse_float64};
-use crate::VM::tokenizer::{TokenType::*, WordToken::*};
+use crate::vm::run_byte_code::{NumericeOp, SemanticError, SyntaxError, parse_float32, parse_float64};
+use crate::vm::tokenizer::{TokenType::*, WordToken::*};
 use dynasmrt::x64::X64Relocation;
 use dynasmrt::*;
 use hashbrown::HashMap;
 use std::mem;
 
-use crate::VM::{Error, run_byte_code::TokenIter, tokenizer::Token};
+use crate::vm::{Error, run_byte_code::TokenIter, tokenizer::Token};
 
 enum StackType {
     I128,
@@ -206,19 +206,19 @@ impl JIT {
     //         start_offset: None
     //     }
     // }
-    fn compile_and_run(
+    fn compile_and_run<O>(
         &mut self,
         tokens: &mut Vec<Token>,
         tokens_iter: &mut TokenIter,
         mut ops: Assembler<X64Relocation>,
-    ) -> Result<i64, Error> {
+    ) -> Result<O, Error> {
         self.collect_funcs(tokens, tokens_iter, &mut ops)?;
         self.compile_funcs(tokens, tokens_iter, &mut ops)?;
         let start_offset = self.start_offset.unwrap();
         // let ops = self.ops;
 
         let buf = ops.finalize().unwrap();
-        let start_fn: extern "C" fn() -> i64 = unsafe { mem::transmute(buf.ptr(start_offset)) };
+        let start_fn: extern "C" fn() -> O = unsafe { mem::transmute(buf.ptr(start_offset)) };
         let result = (start_fn)();
         Ok(result)
     }
@@ -881,7 +881,7 @@ impl JIT {
     }
 }
 
-pub fn run(tokens: &mut Vec<Token>) -> Result<(), Error> {
+pub fn run<O>(tokens: &mut Vec<Token>) -> Result<O, Error> {
     let mut ops = Assembler::new().unwrap();
     let mut jit = JIT {
         functions: HashMap::new(),
@@ -892,6 +892,6 @@ pub fn run(tokens: &mut Vec<Token>) -> Result<(), Error> {
     };
     let mut tokens_iter = TokenIter { index: 0 };
     let result = jit.compile_and_run(tokens, &mut tokens_iter, ops).unwrap();
-    println!("dynasm jit result: {result}");
-    Ok(())
+    // println!("dynasm jit result: {result}");
+    Ok(result)
 }

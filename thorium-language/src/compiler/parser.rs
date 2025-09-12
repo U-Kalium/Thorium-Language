@@ -384,7 +384,7 @@ impl Parser {
             // token: &'a Token,
             scope_return_type: TypeDescription,
             statement: &mut String,
-            maybe_merge_label: Option<String>
+            maybe_merge_label: Option<String>,
         ) {
             tokens.next();
             let peeked = tokens.peek().unwrap();
@@ -397,12 +397,15 @@ impl Parser {
                     token,
                     scope_return_type,
                     statement,
-                    maybe_merge_label
+                    maybe_merge_label,
                 );
             } else {
                 statement.push_str(&parser.parse_scope(tokens, scope_return_type, variables));
                 statement.push_str(&format!("    i8 push 1\n"));
-                statement.push_str(&format!("    i8 jmp \"{}\"\n", &maybe_merge_label.clone().unwrap()));
+                statement.push_str(&format!(
+                    "    i8 jmp \"{}\"\n",
+                    &maybe_merge_label.clone().unwrap()
+                ));
                 // if let Else = tokens.peek().unwrap().token_type {
 
                 // } else {
@@ -417,7 +420,7 @@ impl Parser {
             token: Token,
             scope_return_type: TypeDescription,
             statement: &mut String,
-            maybe_merge_label: Option<String>
+            maybe_merge_label: Option<String>,
         ) {
             let expression = parser.parse_expression(tokens, variables, TypeDescription::bool());
             if expression.expression_type._type != TypeDef::Boolean {
@@ -441,17 +444,34 @@ impl Parser {
             let if_label = format!("ifL{}C{}", token.line, token.column);
             let else_token = tokens.peek().unwrap();
             if let Else = else_token.token_type {
-                statement.push_str(&format!("    {} jmp \"{if_label}\"\n", scope_return_type.strip_modifiers()._type.to_string()));
-                parse_else(parser, tokens, variables, scope_return_type, statement, Some(merge_label.clone()));
+                statement.push_str(&format!(
+                    "    {} jmp \"{if_label}\"\n",
+                    scope_return_type.strip_modifiers()._type.to_string()
+                ));
+                parse_else(
+                    parser,
+                    tokens,
+                    variables,
+                    scope_return_type,
+                    statement,
+                    Some(merge_label.clone()),
+                );
             } else {
-                statement.push_str(&format!("    {} jpz \"{merge_label}\"\n", expression.expression_type.strip_modifiers()._type.to_string()));
+                statement.push_str(&format!(
+                    "    {} jpz \"{merge_label}\"\n",
+                    expression
+                        .expression_type
+                        .strip_modifiers()
+                        ._type
+                        .to_string()
+                ));
             }
-            statement.push_str(&format!("@{if_label}\n"));  
+            statement.push_str(&format!("@{if_label}\n"));
             statement.push_str(&scope);
             statement.push_str(&format!("    i8 push 1\n"));
             statement.push_str(&format!("    i8 jmp \"{}\"\n", merge_label.clone()));
             if final_if {
-                statement.push_str(&format!("@{}\n", merge_label));                
+                statement.push_str(&format!("@{}\n", merge_label));
             }
         }
         fn parse_declaration(
@@ -466,12 +486,19 @@ impl Parser {
             match &token.token_type {
                 Ident(ident) => {
                     // token = tokens.next().unwrap();
-                     
+
                     let variable_properties = VariableProperties {
                         variable_type: parser.parse_type(tokens),
                         is_mutable: is_mutable,
                     };
-                    statement.push_str(&format!("   {} declare %{ident}\n", variable_properties.variable_type.strip_modifiers()._type.to_string()));
+                    statement.push_str(&format!(
+                        "   {} declare %{ident}\n",
+                        variable_properties
+                            .variable_type
+                            .strip_modifiers()
+                            ._type
+                            .to_string()
+                    ));
                     variables.insert(ident.clone(), variable_properties);
                     let peeked_token = tokens.peek().unwrap();
                     match peeked_token.token_type {
@@ -510,7 +537,14 @@ impl Parser {
                 let expression_return =
                     parser.parse_expression(tokens, variables, TypeDescription::bool());
                 statement.push_str(&expression_return.byte_code);
-                statement.push_str(&format!("    {} jpz \"{end_loop_label}\"\n", expression_return.expression_type.strip_modifiers()._type.to_string()));
+                statement.push_str(&format!(
+                    "    {} jpz \"{end_loop_label}\"\n",
+                    expression_return
+                        .expression_type
+                        .strip_modifiers()
+                        ._type
+                        .to_string()
+                ));
 
                 let scope = parser.parse_scope(tokens, scope_return_type, variables);
                 statement.push_str(&scope);
@@ -611,7 +645,7 @@ impl Parser {
                     token,
                     scope_return_type,
                     &mut statement,
-                    None
+                    None,
                 );
             }
             Loop => {
@@ -1119,7 +1153,7 @@ impl Parser {
                         rhs: _,
                     } => {
                         parse_arith_tree(rhs, variables, instructions);
-                    },
+                    }
                     _ => todo!(
                         "Proper error for a arithmatic tree that contains an invalid expression"
                     ),
@@ -1149,7 +1183,7 @@ impl Parser {
                         rhs: _,
                     } => {
                         parse_arith_tree(lhs, variables, instructions);
-                    },
+                    }
                     _ => todo!(
                         "Proper error for a arithmatic tree that contains an invalid expression"
                     ),
@@ -1601,14 +1635,19 @@ pub fn parse(tokens: &mut TokenIter) -> String {
     let mut parser = Parser::new();
     let mut bin = String::new();
 
-    let peeked_token = tokens.peek().unwrap();
-    match &peeked_token.token_type {
-        Fn => bin.push_str(parser.parse_func(tokens).as_str()),
-        t => panic!(
-            "Syntax Error: unexpected token {t:?} found in file base at {}{}",
-            peeked_token.line, peeked_token.column
-        ),
+    let mut peeked_token = tokens.peek().unwrap();
+    while !matches!(peeked_token.token_type, Eof) {
+        match &peeked_token.token_type {
+            Fn => bin.push_str(parser.parse_func(tokens).as_str()),
+            NewLine => {tokens.next().unwrap();},
+            t => panic!(
+                "Syntax Error: unexpected token {t:?} found in file base at {}:{}",
+                peeked_token.line, peeked_token.column
+            ),
+        }
+        peeked_token = tokens.peek().unwrap()
     }
+
     bin.push_str(
         "
 

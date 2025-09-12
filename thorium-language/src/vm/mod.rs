@@ -39,7 +39,7 @@ impl From<RuntimeError> for Error {
     }
 }
 
-pub fn run(byte_code: String) -> Result<(), Error> {
+pub fn run<O>(byte_code: String) -> Result<O, Error> {
     let mut tokens = tokenizer::tokenize(byte_code).unwrap();
     dynasm_jit::run(&mut tokens)
 }

@@ -1,7 +1,9 @@
 use std::env::{self, Args };
 use std::fs;
-mod VM;
+mod vm;
 mod compiler;
+#[cfg(test)]
+mod test;
 
 fn main() {
     let mut command_line_args = env::args();
@@ -20,8 +22,8 @@ fn run_sub_command(args: &mut Args) {
     if let Some(file_path) = args.next() {
         let file_content = fs::read_to_string(file_path).unwrap();
         let byte_code = compiler::compile(&file_content);
-        VM::run(byte_code).unwrap()
-
+        let result: i64 = vm::run(byte_code).unwrap();
+        println!("result: {result}")
     } else {
         panic!("expected file path")
     }
@@ -42,7 +44,7 @@ fn  build_sub_command(args: &mut Args) {
 fn run_byte_sub_command(args: &mut Args) {
     if let Some(file_path) = args.next() {
         let file_content = fs::read_to_string(file_path).unwrap();
-        VM::run(file_content).unwrap()
+        vm::run(file_content).unwrap()
 
     } else {
         panic!("expected file path")

@@ -56,7 +56,8 @@ pub enum TokenType {
     Comma,
     Loop,
     LessEqual,
-    GreatEqual
+    GreatEqual,
+    Eof
 }
 #[derive(Debug, Clone)]
 pub struct Token {
@@ -476,6 +477,11 @@ pub fn tokanize(content: String) -> Vec<Token> {
         }
         buffer.clear();
     }
+    tokens.push(Token {
+        token_type: TokenType::Eof,
+        line: file_line,
+        column: column
+    });
 
     tokens
 }
