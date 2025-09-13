@@ -1,8 +1,8 @@
 
-fn main() i64 {
+let main() i64 {
     var a i64; let b i64 {
         return 69
     }
     a = 10
-    return a
+    return b
 }

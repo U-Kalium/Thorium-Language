@@ -5,7 +5,7 @@ use crate::vm::tokenizer::{TokenType::*, WordToken::*};
 use dynasmrt::x64::X64Relocation;
 use dynasmrt::*;
 use hashbrown::HashMap;
-use std::mem;
+use std::mem::{self, transmute};
 
 use crate::vm::{Error, run_byte_code::TokenIter, tokenizer::Token};
 
@@ -27,7 +27,7 @@ impl StackType {
             StackType::I32 => size_of::<i32>(),
             StackType::I16 => size_of::<i16>(),
             StackType::I8 => size_of::<i8>(),
-            StackType::F32 => size_of::<f32>(),
+            StackType::F32 => size_of::<f64>(),
             StackType::F64 => size_of::<f64>(),
         }
     }
@@ -345,6 +345,7 @@ impl JIT {
                 Word(Return) => {
                     dynasm!(ops
                         ; pop rax
+                        ; movq xmm0, rax
                         ;; function_epiloge!(ops)
                         ; ret
                     );
@@ -397,8 +398,14 @@ impl JIT {
                                         ; sub rsp, var.type_.size() as i32
                                         ; mov [rbp - offset], r10b
                                     ),
-                                    StackType::F32 => todo!(),
-                                    StackType::F64 => todo!(),
+                                    StackType::F32 => dynasm!(ops
+                                        ; pop r10
+                                        ; mov [rbp - offset], r10
+                                    ),
+                                    StackType::F64 => dynasm!(ops
+                                        ; pop r10
+                                        ; mov [rbp - offset], r10
+                                    ),
                                 }
                             } else {
                                 return Err(SemanticError::UndefinedVar {
@@ -731,24 +738,23 @@ impl JIT {
                                 }
                                 StackType::F32 => {
                                     let float = parse_float32(tokens_iter, num, tokens)?;
+                                    let as_int = f32::to_bits(float).cast_signed();
                                     dynasm!(ops
                                         ; .arch x64
-                                        ; f32val:
-                                        ; .bytes float.to_ne_bytes()
-                                        ; fld DWORD [<f32val]
-                                        ; fstp
-                                        // ; push float
+                                        ; mov rax, as_int
+                                        ; push rax
                                     )
                                 }
                                 StackType::F64 => {
                                     let float = parse_float64(tokens_iter, num, tokens)?;
+                                    dbg!(float);
+                                    let as_int = f64::to_bits(float).cast_signed();
+                                    dbg!(as_int);
+                                    
                                     dynasm!(ops
                                         ; .arch x64
-                                        ; f64val:
-                                        ; .bytes float.to_ne_bytes()
-                                        ; fld QWORD [<f32val]
-                                        ; fstp
-                                        // ; push float
+                                        ; mov rax, QWORD as_int
+                                        ; push rax
                                     )
                                 }
                             }
@@ -1101,7 +1107,7 @@ impl JIT {
                 Word(F32) => {
                     tokens_iter.next(tokens);
                     token = tokens_iter.next(tokens);
-                    total_variable_offset += size_of::<f32>();
+                    total_variable_offset += size_of::<f64>();
                     if let VarIdent(ident) = &token.token_type {
                         let var = Variable {
                             ident: ident.clone(),
