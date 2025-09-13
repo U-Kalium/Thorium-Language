@@ -24,16 +24,13 @@ let bar f32 {
 
 // Functions and Lambdas
 
-/*
-    lambdas are simply functions without a identifier. 
-*/
 
-fn add (lhs i32, rhs i32) i32 {
+let add (lhs i32, rhs i32) i32 {
     finish lhs + rhs
 }
 // writing a function like this without named arguments
 // defaults the arguments to arg0, arg1 ....
-fn minus (i32, i32) i32 {
+let minus (i32, i32) i32 {
     finish arg0 - arg1
 }
 
@@ -110,16 +107,16 @@ type Person struct {
     they are mainly used for generics.
 */
 
-// the type of this "funciton" is <&mut Person>(int)
-// the ident is technically something like Person.age so you can have other age functions
-fn age_up <p &mut Person> (years int) {                   // Simillar to Go's reciever syntax although due to funcs == variables we put it after ident and in <>
-    p.age += years
+// a method is a normal funciton where the first argument is named self
+// this automaticcally allows it to be used as methods 
+let age_up(self &mut Person, amount int) {
+
 }
 
 mike.age_up(10)
 
 interface Ageable {                                     // An interface can be a list of methods and properties with `self` being a replacement to whatever the type is
-    fn age_up<&mut self>(int)                           // methods need to be prefixed with `fn`
+    age_up(&mut self, int)
     age int                                             // properties don't have to be prefaced
 }
 
@@ -128,19 +125,19 @@ interface Ageable {                                     // An interface can be a
     As person has a method with the same name and simillar type it implicitly implements the interface 
 */
 
-fn age_all(things []Ageable) {                          // although this looks close to Go's interfaces this will function more like rust generics as all objects in things will be of the same type
+let age_all<T Ageable>(things) {                          // the generic arguments go in the <> brackets and are declared the same as arguments but type is replaced with an interface
 
 }
 
 interface Growable {
-    grow<&mut self>(f32)
+    grow(&mut self, f32)
 }
 
-fn grow <p &mut Person> (length f32) {
-    p.height += length
+let grow(self &mut Perdson, length f32) {
+    height += length                                     // you can use the members of self without prefacing them 
 }
 
-fn age_and_grow(things []Ageable:Growable) {            // If you need something to satisfy multiple Interfaces
+let age_and_grow<T Ageable & Growable>(things []T) {            // If you need something to satisfy multiple Interfaces
 
 }
 
@@ -161,7 +158,7 @@ type Entity struct {                                    // can be thought of as 
     is_shown bool
 }
 
-fn update<&mut Entity>() {
+let update<&mut Entity>() {
 
 }
 
@@ -179,7 +176,7 @@ type Character struct {
 
 let character1 Character {                      // Initialised as if Entity members are part of Charcter
     id = 0
-    is_shown = true
+    is_shown = trueUnion
     name = "john"
 }
 
@@ -227,10 +224,10 @@ loop var i = 0; i < 10; i += 1 {
 
 }
 
-// tagged unions
+// tagged unions/enums
 
-type MarriageStatus Union {
-    Married(parner)
+type MarriageStatus Enum {
+    Married Partner         // the varient name followed by type
 }
 
 // anonymouse
