@@ -152,6 +152,7 @@ struct VariableProperties {
     is_mutable: bool,
 }
 
+#[derive(Debug)]
 struct ExpressionReturn {
     byte_code: String,
     expression_type: TypeDescription,
@@ -320,7 +321,7 @@ impl Parser {
         match &token.token_type {
             OpenCurlyBracket => {}
             t => panic!(
-                "Syntax Error: expected {{, found {t:?} at {}{} ",
+                "Syntax Error: expected {{, found {t:?} at {}:{} ",
                 token.line, token.column
             ),
         }
@@ -551,7 +552,36 @@ impl Parser {
                 scope_return_type: TypeDescription,
                 statement: &mut String,
             ) {
-                todo!("for loop")
+                let loop_token = tokens.peek().unwrap();
+                let begin_loop_label =
+                    format!("beginLoopL{}C{}", loop_token.line, loop_token.column);
+                let end_loop_label = format!("endLoopL{}C{}", loop_token.line, loop_token.column);
+                let first_statement = parser.parse_statement(tokens, variables, scope_return_type.clone());
+                let expression_return =
+                    parser.parse_expression(tokens, variables, TypeDescription::bool());
+                tokens.next();
+                let second_statement = parser.parse_statement(tokens, variables, scope_return_type.clone());
+                dbg!(&expression_return);
+                statement.push_str(&first_statement);
+                statement.push_str(&format!("@{begin_loop_label}\n"));
+                statement.push_str(&expression_return.byte_code);
+                statement.push_str(&format!(
+                    "    {} jmp \"{end_loop_label}\"\n",
+                    expression_return
+                        .expression_type
+                        .strip_modifiers()
+                        ._type
+                        .to_string()
+                ));
+
+                let scope = parser.parse_scope(tokens, scope_return_type, variables);
+                statement.push_str(&scope);
+
+                statement.push_str(&second_statement);
+
+                statement.push_str(&format!("    i8 push 1\n"));
+                statement.push_str(&format!("    i8 jmp \"{begin_loop_label}\"\n"));
+                statement.push_str(&format!("@{end_loop_label}\n"));
             }
             // checking what type of loop
             let mut peeked = tokens.peek().unwrap();

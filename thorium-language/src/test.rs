@@ -42,5 +42,9 @@ fn numbers() {
 
 #[test]
 fn loops() {
-    
+    let file = include_str!("../../examples/loops.th");
+    let byte_code = compiler::compile(file);
+    let result: i64 = vm::run(byte_code).unwrap();
+    dbg!(result);
+    assert!(result == 11)
 }

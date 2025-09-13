@@ -1,9 +1,17 @@
-fn main() i64 {
+let main() i64 {
 
     var while_number i64 = 0;
     loop while_number <= 10000000 {
         while_number = while_number + 1
     }
 
-    finish while_number
+    if while_number < 10000001 {
+        finish 1
+    }
+
+    var for_number i64 = 0;
+    loop var i i64 = 0; i < 20; i = i + 2;{
+        for_number = for_number + 1
+    }
+    finish for_number
 }
