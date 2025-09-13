@@ -18,7 +18,6 @@ impl Display for Number {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum TokenType {
-    Fn,
     Ident(String),
     I64,
     I32,
@@ -57,7 +56,7 @@ pub enum TokenType {
     Loop,
     LessEqual,
     GreatEqual,
-    Eof
+    Eof,
 }
 #[derive(Debug, Clone)]
 pub struct Token {
@@ -73,7 +72,7 @@ impl Token {
             TokenType::Minus => true,
             TokenType::ForwardSlash => true,
             TokenType::Star => true,
-            _ => false
+            _ => false,
         }
     }
 }
@@ -89,7 +88,7 @@ impl TokenIter {
         Self {
             tokens,
             index: 0,
-            just_initialized: true
+            just_initialized: true,
         }
     }
     pub fn next(&mut self) -> Option<Token> {
@@ -120,13 +119,12 @@ impl TokenIter {
             // self.just_initialized = false;
             self.tokens.get(self.index as usize).cloned()
         } else {
-            self.tokens.get(self.index as usize +1).cloned()
+            self.tokens.get(self.index as usize + 1).cloned()
         }
     }
     pub fn back(&mut self) -> Option<Token> {
-            self.index -= 1;
-            self.tokens.get(self.index as usize).cloned()
-
+        self.index -= 1;
+        self.tokens.get(self.index as usize).cloned()
     }
 }
 
@@ -150,14 +148,7 @@ pub fn tokanize(content: String) -> Vec<Token> {
                 buffer.push(content_chars.next().unwrap());
                 column += 1
             }
-
-            if &buffer == &String::from("fn") {
-                tokens.push(Token {
-                    token_type: TokenType::Fn,
-                    line: file_line,
-                    column: column - buffer.len() as u32,
-                });
-            } else if &buffer == &String::from("return") {
+            if &buffer == &String::from("return") {
                 tokens.push(Token {
                     token_type: TokenType::Return,
                     line: file_line,
@@ -480,7 +471,7 @@ pub fn tokanize(content: String) -> Vec<Token> {
     tokens.push(Token {
         token_type: TokenType::Eof,
         line: file_line,
-        column: column
+        column: column,
     });
 
     tokens

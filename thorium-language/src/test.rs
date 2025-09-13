@@ -3,7 +3,7 @@ use crate::{compiler, vm};
 #[test]
 fn variable() {
     let file = "
-fn main() i64 {
+let main() i64 {
     var a i64; let b i64 {
         return 69
     }

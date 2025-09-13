@@ -4,15 +4,16 @@ use std::collections::HashSet;
 use crate::compiler::tokenizer::TokenType::*;
 use crate::compiler::tokenizer::{Token, TokenIter};
 
-struct FunctionType {
+#[derive(Clone, Debug, PartialEq)]
+struct FunctionDef {
     parems: HashMap<String, String>,
-    returns: TypeDescription,
+    returns: Box<TypeDescription>,
 }
-impl FunctionType {
+impl FunctionDef {
     fn new() -> Self {
-        FunctionType {
+        FunctionDef {
             parems: HashMap::new(),
-            returns: TypeDescription::bool(),
+            returns: Box::new(TypeDescription::bool()),
         }
     }
 }
@@ -44,7 +45,7 @@ impl TypeDescription {
     fn strip_modifiers(&self) -> Self {
         TypeDescription {
             modifier: ModifierType::None,
-            _type: self._type,
+            _type: self._type.clone(),
         }
     }
     fn undefined_number() -> Self {
@@ -55,10 +56,11 @@ impl TypeDescription {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 enum TypeDef {
     Number(NumberDef),
     Boolean,
+    Func(FunctionDef),
 }
 
 impl TypeDef {
@@ -79,6 +81,7 @@ impl TypeDef {
         match self {
             TypeDef::Number(number_def) => number_def.to_string(),
             TypeDef::Boolean => "i8".to_string(),
+            TypeDef::Func(func) => todo!(),
         }
     }
     fn is_number(&self) -> bool {
@@ -202,7 +205,7 @@ enum Expression {
 }
 
 struct Parser {
-    functions: HashMap<String, FunctionType>,
+    functions: HashMap<String, FunctionDef>,
     variables: HashMap<String, VariableProperties>,
     types: HashSet<String>,
 }
@@ -216,77 +219,93 @@ impl Parser {
         }
     }
 
-    fn parse_func(&mut self, tokens: &mut TokenIter) -> String {
-        fn parse_func_args(tokens: &mut TokenIter) -> String {
-            let func_args = String::new();
-            let token = tokens.next().unwrap();
-            match &token.token_type {
-                CloseBracket => {}
-                Ident(ident) => todo!("add function paremeters"),
-                t => panic!(
-                    "Syntax Error: expected ) or ident for function args, found {t:?} at {}:{} ",
-                    token.line, token.column
-                ),
-            }
-            func_args
-        }
-        let func_name;
-        let mut func_type = FunctionType::new();
-
-        let mut func = String::new();
-        let mut token = tokens.next().unwrap();
-        match &token.token_type {
-            Fn => {
-                func.push_str("func ");
-            }
-            t => panic!(
-                "Syntax Error: expected `fn` keyword, found {t:?} at {}:{}",
-                token.line, token.column
-            ),
-        }
-        // func name
-        token = tokens.next().unwrap();
+    fn parse_declaration(
+        &mut self,
+        tokens: &mut TokenIter,
+        variables: &mut HashMap<String, VariableProperties>,
+        statement: &mut String,
+        is_mutable: bool,
+    ) {
+        tokens.next();
+        let token = tokens.next().unwrap();
         match &token.token_type {
             Ident(ident) => {
-                if self.functions.contains_key(ident) {
-                    panic!("Error: function {ident} already declared")
+                // token = tokens.next().unwrap();
+
+                let variable_properties: VariableProperties = VariableProperties {
+                    variable_type: self.parse_type(tokens),
+                    is_mutable: is_mutable,
+                };
+                match variable_properties.variable_type {
+                    TypeDescription {
+                        modifier: ModifierType::None,
+                        _type: TypeDef::Func(func_def),
+                    } => {
+                        statement.push_str(format!("func ${ident}:\n").as_str());
+                        statement.push_str(&self.parse_scope(tokens, *func_def.returns.clone(), variables));
+                        statement.push_str("    return\n");
+                        statement.push_str("endfunc\n");
+
+                        self.functions.insert(ident.to_string(), func_def);
+                    }
+                    _ => {
+                        statement.push_str(&format!(
+                            "   {} declare %{ident}\n",
+                            variable_properties
+                                .variable_type
+                                .strip_modifiers()
+                                ._type
+                                .to_string()
+                        ));
+                        variables.insert(ident.clone(), variable_properties);
+                        let peeked_token = tokens.peek().unwrap();
+                        match peeked_token.token_type {
+                            NewLine => {}
+                            SemiColon => {}
+                            _ => statement
+                                .push_str(&self.parse_assignment(tokens, variables, &ident)),
+                        }
+                    }
                 }
-                func.push_str(format!("${ident}").as_str());
-                func_name = ident.clone()
-            }
-            OpenBracket => {
-                todo!("anonymouse function parsing")
             }
             t => panic!(
-                "Syntax Error: expected ident or (), found {t:?} at {}:{} ",
+                "Syntax Error: expected identifier, found {t:?} at {}:{} ",
                 token.line, token.column
             ),
         }
-        // func arguments
-        token = tokens.next().unwrap();
+    }
+
+    fn parse_func_type(&mut self, tokens: &mut TokenIter) -> TypeDef {
+        let mut func_type = FunctionDef::new();
+        let mut token = tokens.next().unwrap();
         match &token.token_type {
-            OpenBracket => func.push_str(&parse_func_args(tokens)),
+            OpenBracket => {
+                let peeked = tokens.peek().unwrap();
+                while !matches!(peeked.token_type, CloseBracket) {
+                    token = tokens.next().unwrap();
+                    match token.token_type {
+                        Ident(ident) => todo!("add function paremeters"),
+                        t => panic!(
+                            "Syntax Error: expected ) or ident for function args, found {t:?} at {}:{} ",
+                            token.line, token.column
+                        ),
+                    }
+                }
+                tokens.next();
+            }
             OpenAngleBracket => {
-                todo!("Method signature")
+                todo!("generics")
             }
             t => panic!(
                 "Syntax Error: expected () or <>, found {t:?} at {}:{} ",
                 token.line, token.column
             ),
         }
-        // func returns
-        func_type.returns = self.parse_type(tokens);
-        func.push_str(":\n");
 
-        // func body
-        let mut func_variables = HashMap::new();
-        func.push_str(&self.parse_scope(tokens, func_type.returns.clone(), &mut func_variables));
-        func.push_str("    return\n");
-        func.push_str("endfunc\n");
+        let return_type = self.parse_type(tokens);
+        func_type.returns = Box::new(return_type);
 
-        self.functions.insert(func_name, func_type);
-
-        func
+        TypeDef::Func(func_type)
     }
 
     fn parse_scope(
@@ -319,7 +338,7 @@ impl Parser {
             modifier: ModifierType::None,
             _type: TypeDef::new(),
         };
-        fn parse_standalone_type(tokens: &mut TokenIter) -> TypeDef {
+        fn parse_standalone_type(parser: &mut Parser, tokens: &mut TokenIter) -> TypeDef {
             let token = tokens.next().unwrap();
             match &token.token_type {
                 I64 => TypeDef::Number(NumberDef::Integer(IntegerDef::I64)),
@@ -329,6 +348,10 @@ impl Parser {
                 F64 => TypeDef::Number(NumberDef::Float(FloatDef::F64)),
                 F32 => TypeDef::Number(NumberDef::Float(FloatDef::F32)),
                 Bool => TypeDef::Boolean,
+                OpenBracket => {
+                    tokens.back();
+                    parser.parse_func_type(tokens)
+                }
                 Ident(_ident) => todo!("Custom types parsing"),
                 t => panic!(
                     "Syntax Error: expected type, found {t:?} at {}:{} ",
@@ -365,7 +388,7 @@ impl Parser {
             }
         }
         parsed_type.modifier = parse_dependent_type(tokens);
-        parsed_type._type = parse_standalone_type(tokens);
+        parsed_type._type = parse_standalone_type(self, tokens);
 
         parsed_type
     }
@@ -472,47 +495,6 @@ impl Parser {
             statement.push_str(&format!("    i8 jmp \"{}\"\n", merge_label.clone()));
             if final_if {
                 statement.push_str(&format!("@{}\n", merge_label));
-            }
-        }
-        fn parse_declaration(
-            parser: &mut Parser,
-            tokens: &mut TokenIter,
-            variables: &mut HashMap<String, VariableProperties>,
-            statement: &mut String,
-            is_mutable: bool,
-        ) {
-            tokens.next();
-            let token = tokens.next().unwrap();
-            match &token.token_type {
-                Ident(ident) => {
-                    // token = tokens.next().unwrap();
-
-                    let variable_properties = VariableProperties {
-                        variable_type: parser.parse_type(tokens),
-                        is_mutable: is_mutable,
-                    };
-                    statement.push_str(&format!(
-                        "   {} declare %{ident}\n",
-                        variable_properties
-                            .variable_type
-                            .strip_modifiers()
-                            ._type
-                            .to_string()
-                    ));
-                    variables.insert(ident.clone(), variable_properties);
-                    let peeked_token = tokens.peek().unwrap();
-                    match peeked_token.token_type {
-                        NewLine => {}
-                        SemiColon => {}
-                        _ => {
-                            statement.push_str(&parser.parse_assignment(tokens, variables, &ident))
-                        }
-                    }
-                }
-                t => panic!(
-                    "Syntax Error: expected identifier, found {t:?} at {}:{} ",
-                    token.line, token.column
-                ),
             }
         }
         fn parse_loop(
@@ -631,10 +613,10 @@ impl Parser {
                 statement.push_str(&expression.byte_code);
             }
             Var => {
-                parse_declaration(self, tokens, variables, &mut statement, true);
+                self.parse_declaration(tokens, variables, &mut statement, true);
             }
             Let => {
-                parse_declaration(self, tokens, variables, &mut statement, false);
+                self.parse_declaration(tokens, variables, &mut statement, false);
             }
             If => {
                 tokens.next();
@@ -1611,10 +1593,11 @@ impl Parser {
                         } => match _type {
                             TypeDef::Number(_) => {
                                 if array_type._type.clone().is_number() {
-                                    element.expression_type._type = array_type._type
+                                    element.expression_type._type = array_type.clone()._type
                                 }
                             }
                             TypeDef::Boolean => todo!(),
+                            TypeDef::Func(_) => todo!()
                         },
                         _ => panic!("Proper error when a array element has a modifeir"),
                     }
@@ -1638,8 +1621,15 @@ pub fn parse(tokens: &mut TokenIter) -> String {
     let mut peeked_token = tokens.peek().unwrap();
     while !matches!(peeked_token.token_type, Eof) {
         match &peeked_token.token_type {
-            Fn => bin.push_str(parser.parse_func(tokens).as_str()),
-            NewLine => {tokens.next().unwrap();},
+            Let => {
+                let mut variables = HashMap::new();
+                let mut statement = String::new();
+                parser.parse_declaration(tokens, &mut variables, &mut statement, false);
+                bin.push_str(&statement);
+            }
+            NewLine => {
+                tokens.next().unwrap();
+            }
             t => panic!(
                 "Syntax Error: unexpected token {t:?} found in file base at {}:{}",
                 peeked_token.line, peeked_token.column

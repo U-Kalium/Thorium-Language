@@ -1,4 +1,4 @@
-fn main() i64 {
+let main() i64 {
     var a [11]i64 = [ 1, 2, 3,
         4,
         5,
