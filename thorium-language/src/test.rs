@@ -33,9 +33,9 @@ fn conditional() {
 #[test]
 
 fn numbers() {
-    let file = include_str!("../../examples/numbers.thb");
-    // let byte_code = compiler::compile(file);
-    let result: f32 = vm::run(file.to_string()).unwrap();
+    let file = include_str!("../../examples/numbers.th");
+    let byte_code = compiler::compile(file);
+    let result: f32 = vm::run(byte_code).unwrap();
     dbg!(result);
     assert!(result == 3.14)
 }

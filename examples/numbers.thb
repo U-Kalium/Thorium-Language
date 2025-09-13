@@ -2,7 +2,7 @@ func $main:
    f32 declare %e
     f32 push 3.14
     set %e
-    f32 push 3.14
+    get %e
     return
     return
 endfunc
