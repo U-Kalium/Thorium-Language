@@ -1,4 +1,6 @@
-use crate::vm::run_byte_code::{NumericeOp, SemanticError, SyntaxError, parse_float32, parse_float64};
+use crate::vm::run_byte_code::{
+    NumericeOp, SemanticError, SyntaxError, parse_float32, parse_float64,
+};
 use crate::vm::tokenizer::{TokenType::*, WordToken::*};
 use dynasmrt::x64::X64Relocation;
 use dynasmrt::*;
@@ -370,43 +372,138 @@ impl JIT {
                 }
                 Word(Set) => {
                     token = tokens_iter.next(tokens);
-                    if let VarIdent(ident) = &token.token_type {
-                        if let Some(var) = self.variables.get(ident) {
-                            let offset = var.stack_offset as i32;
-                            match var.type_ {
-                                StackType::I128 => todo!(),
-                                StackType::I64 => dynasm!(ops
-                                    ; pop r10
-                                    ; mov [rbp - offset], r10
-                                ),
-                                StackType::I32 => dynasm!(ops
-                                    ; mov r10d, [rsp]
-                                    ; sub rsp, var.type_.size() as i32
-                                    ; mov [rbp - offset], r10d
-                                ),
-                                StackType::I16 => dynasm!(ops
-                                    ; mov r10w, [rsp]
-                                    ; sub rsp, var.type_.size() as i32
-                                    ; mov [rbp - offset], r10w
-                                ),
-                                StackType::I8 => dynasm!(ops
-                                    ; mov r10b, [rsp]
-                                    ; sub rsp, var.type_.size() as i32
-                                    ; mov [rbp - offset], r10b
-                                ),
-                                StackType::F32 => todo!(),
-                                StackType::F64 => todo!(),
+                    match &token.token_type {
+                        VarIdent(ident) => {
+                            if let Some(var) = self.variables.get(ident) {
+                                let offset = var.stack_offset as i32;
+                                match var.type_ {
+                                    StackType::I128 => todo!(),
+                                    StackType::I64 => dynasm!(ops
+                                        ; pop r10
+                                        ; mov [rbp - offset], r10
+                                    ),
+                                    StackType::I32 => dynasm!(ops
+                                        ; mov r10d, [rsp]
+                                        ; sub rsp, var.type_.size() as i32
+                                        ; mov [rbp - offset], r10d
+                                    ),
+                                    StackType::I16 => dynasm!(ops
+                                        ; mov r10w, [rsp]
+                                        ; sub rsp, var.type_.size() as i32
+                                        ; mov [rbp - offset], r10w
+                                    ),
+                                    StackType::I8 => dynasm!(ops
+                                        ; mov r10b, [rsp]
+                                        ; sub rsp, var.type_.size() as i32
+                                        ; mov [rbp - offset], r10b
+                                    ),
+                                    StackType::F32 => todo!(),
+                                    StackType::F64 => todo!(),
+                                }
+                            } else {
+                                return Err(SemanticError::UndefinedVar {
+                                    ident: token.clone(),
+                                })?;
                             }
-                        } else {
-                            return Err(SemanticError::UndefinedVar {
-                                ident: token.clone(),
+                        }
+                        Word(Stack) => {
+                            token = tokens_iter.next(tokens);
+                            match &token.token_type {
+                                Number(num) => {
+                                    dynasm!(ops
+                                        ; mov r10, *num as _
+                                    )
+                                }
+                                VarIdent(ident) => {
+                                    if let Some(var) = self.variables.get(ident) {
+                                        dynasm!(ops
+                                            ; mov r10, [rbp - var.stack_offset as i32]
+                                        )
+                                    } else {
+                                        return Err(SemanticError::UndefinedVar {
+                                            ident: token.clone(),
+                                        })?;
+                                    }
+                                }
+                                Word(Top) => {
+                                    dynasm!(ops
+                                        ; mov r10, rsp
+                                    )
+                                }
+                                _ => {
+                                    return Err(SyntaxError::Expected {
+                                        expected_token: "number for pointer".to_string(),
+                                        found: token.clone(),
+                                    })?;
+                                }
+                            }
+                            let peeked = tokens_iter.peek(tokens);
+                            match peeked.token_type {
+                                Plus => {
+                                    tokens_iter.next(tokens);
+                                    token = tokens_iter.next(tokens);
+                                    match &token.token_type {
+                                        Number(num) => {
+                                            let number = num * 8;
+                                            dynasm!(ops
+                                                ; sub r10, number as _
+                                            )
+                                        }
+                                        Word(Top) => {
+                                            dynasm!(ops
+                                                ; mov r11, [rsp]
+                                                ; mov r9, 8
+                                                ; imul r11, r9
+                                                ; sub r10, r11
+                                            )
+                                        }
+                                        _ => {
+                                            return Err(SyntaxError::Expected {
+                                                expected_token: "number, or top".to_string(),
+                                                found: token.clone(),
+                                            })?;
+                                        }
+                                    }
+                                }
+                                Minus => {
+                                    tokens_iter.next(tokens);
+                                    token = tokens_iter.next(tokens);
+                                    match &token.token_type {
+                                        Number(num) => {
+                                            let number = num * 8;
+                                            dynasm!(ops
+                                                ; add r10, number as _
+                                            )
+                                        }
+                                        Word(Top) => {
+                                            dynasm!(ops
+                                                ; mov r11, [rsp]
+                                                ; mov r9, 8
+                                                ; imul r11, r9
+                                                ; add r10, r11
+                                            )
+                                        }
+                                        _ => {
+                                            return Err(SyntaxError::Expected {
+                                                expected_token: "number, or top".to_string(),
+                                                found: token.clone(),
+                                            })?;
+                                        }
+                                    }
+                                }
+                                _ => {}
+                            }
+                            dynasm!(ops
+                                ; pop r11
+                                ; mov [r10], r11
+                            )
+                        }
+                        _ => {
+                            return Err(SyntaxError::Expected {
+                                expected_token: "variable ident, or stack keyword".to_owned(),
+                                found: token.clone(),
                             })?;
                         }
-                    } else {
-                        return Err(SyntaxError::Expected {
-                            expected_token: "variable ident".to_owned(),
-                            found: token.clone(),
-                        })?;
                     }
                 }
                 Word(Get) => {
@@ -432,7 +529,123 @@ impl JIT {
                 Word(Cast) => {
                     tokens_iter.next(tokens);
                 }
-
+                Word(Cpy) => {
+                    token = tokens_iter.next(tokens);
+                    match &token.token_type {
+                        Number(num) => {
+                            dynasm!(ops
+                                ; mov r10, *num as _
+                            )
+                        }
+                        VarIdent(ident) => {
+                            if let Some(var) = self.variables.get(ident) {
+                                dynasm!(ops
+                                    ; mov r10, [rbp - var.stack_offset as i32]
+                                )
+                            } else {
+                                return Err(SemanticError::UndefinedVar {
+                                    ident: token.clone(),
+                                })?;
+                            }
+                        }
+                        Word(Top) => {
+                            dynasm!(ops
+                                ; mov r10, rsp
+                            )
+                        }
+                        _ => {
+                            return Err(SyntaxError::Expected {
+                                expected_token: "number for pointer".to_string(),
+                                found: token.clone(),
+                            })?;
+                        }
+                    }
+                    let peeked = tokens_iter.peek(tokens);
+                    match peeked.token_type {
+                        Plus => {
+                            tokens_iter.next(tokens);
+                            token = tokens_iter.next(tokens);
+                            match &token.token_type {
+                                Number(num) => {
+                                    let number = num * 8;
+                                    dynasm!(ops
+                                        ; sub r10, number as _
+                                    )
+                                }
+                                Word(Top) => {
+                                    let byte = 8;
+                                    dynasm!(ops
+                                        ; mov r11, [rsp]
+                                        ; mov r9, 8
+                                        ; imul r11, r9
+                                        ; sub r10, r11
+                                    )
+                                }
+                                _ => {
+                                    return Err(SyntaxError::Expected {
+                                        expected_token: "number, or top".to_string(),
+                                        found: token.clone(),
+                                    })?;
+                                }
+                            }
+                        }
+                        Minus => {
+                            tokens_iter.next(tokens);
+                            token = tokens_iter.next(tokens);
+                            match &token.token_type {
+                                Number(num) => {
+                                    let number = num * 8;
+                                    dynasm!(ops
+                                        ; add r10, number as _
+                                    )
+                                }
+                                Word(Top) => {
+                                    dynasm!(ops
+                                        ; mov r11, [rsp]
+                                        ; mov r9, 8
+                                        ; imul r11, r9
+                                        ; add r10, r11
+                                    )
+                                }
+                                _ => {
+                                    return Err(SyntaxError::Expected {
+                                        expected_token: "number, or top".to_string(),
+                                        found: token.clone(),
+                                    })?;
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                    token = tokens_iter.next(tokens);
+                    match &token.token_type {
+                        Word(Mem) => todo!(),
+                        VarIdent(ident) => {
+                            if let Some(var) = self.variables.get(ident) {
+                                dynasm!(ops
+                                    ; mov r11, [r10]
+                                    ; mov [rbp - var.stack_offset as i32], r11
+                                )
+                            } else {
+                                return Err(SemanticError::UndefinedVar {
+                                    ident: token.clone(),
+                                })?;
+                            }
+                        }
+                        Word(Top) => {
+                            dynasm!(ops
+                                ; mov r11, [r10]
+                                ; mov [rsp], r11
+                            )
+                        }
+                        _ => {
+                            return Err(SyntaxError::Expected {
+                                expected_token: "mem or var ident".to_string(),
+                                found: token.clone(),
+                            })?;
+                        }
+                    }
+                }
                 Word(I128) => {
                     self.compile_numeric_instruction(tokens, tokens_iter, StackType::I128, ops)?
                 }
@@ -540,9 +753,39 @@ impl JIT {
                                 }
                             }
                         }
-                        Word(Top) => {
-                            todo!()
-                        }
+                        Word(Top) => match num_type {
+                            StackType::I128 => todo!(),
+                            StackType::I64 => {
+                                dynasm!(ops
+                                    ; .arch x64
+                                    ; push rsp
+                                )
+                            }
+                            StackType::I32 => {
+                                dynasm!(ops
+                                    ; .arch x64
+                                    ; push rsp
+                                )
+                            }
+                            StackType::I16 => {
+                                dynasm!(ops
+                                    ; .arch x64
+                                    ; push rsp
+                                )
+                            }
+                            StackType::I8 => {
+                                dynasm!(ops
+                                    ; .arch x64
+                                    ; push rsp
+                                )
+                            }
+                            StackType::F32 => {
+                                todo!()
+                            }
+                            StackType::F64 => {
+                                todo!()
+                            }
+                        },
                         _ => {
                             return Err(SyntaxError::Expected {
                                 expected_token: "top or number".to_owned(),
