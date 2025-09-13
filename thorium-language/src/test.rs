@@ -13,7 +13,7 @@ fn variable() {
 
 #[test]
 
-fn array() {
+fn conditional() {
     let file = include_str!("../../examples/conditional.th");
     let byte_code = compiler::compile(file);
     let result: i64 = vm::run(byte_code).unwrap();
@@ -22,7 +22,7 @@ fn array() {
 }
 #[test]
 
-fn conditional() {
+fn array() {
     let file = include_str!("../../examples/arrays.th");
     let byte_code = compiler::compile(file);
     let result: i64 = vm::run(byte_code).unwrap();

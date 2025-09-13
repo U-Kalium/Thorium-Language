@@ -7,7 +7,7 @@ func $main:
     i64 push 7
     i64 push 6
     i64 push 5
-    i64 push 5
+    i64 push 4
     i64 push 3
     i64 push 2
     i64 push 1
@@ -22,6 +22,15 @@ func $main:
     set %b
     i64 push 69
     set stack %a - 1
+   i64 declare %empty
+    i32 push 0
+    i32 push 0
+    i32 push 0
+    i32 push 0
+    i32 push 0
+    i64 push 5
+    i64 push top
+    set %empty
     get %b
     i64 push 4
     i64 eq

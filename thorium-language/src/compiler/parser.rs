@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 
+use dynasmrt::Modifier;
+
 use crate::compiler::tokenizer::TokenType::*;
 use crate::compiler::tokenizer::{Token, TokenIter};
 
@@ -147,6 +149,7 @@ impl FloatDef {
     }
 }
 
+#[derive(Debug, Clone)]
 struct VariableProperties {
     variable_type: TypeDescription,
     is_mutable: bool,
@@ -243,11 +246,36 @@ impl Parser {
                         _type: TypeDef::Func(func_def),
                     } => {
                         statement.push_str(format!("func ${ident}:\n").as_str());
-                        statement.push_str(&self.parse_scope(tokens, *func_def.returns.clone(), variables));
+                        statement.push_str(&self.parse_scope(
+                            tokens,
+                            *func_def.returns.clone(),
+                            variables,
+                        ));
                         statement.push_str("    return\n");
                         statement.push_str("endfunc\n");
 
                         self.functions.insert(ident.to_string(), func_def);
+                    }
+                    TypeDescription {
+                        modifier: ModifierType::FixedArray(size),
+                        ref _type,
+                    } => {
+                        statement.push_str(&format!("   i64 declare %{ident}\n"));
+                        variables.insert(ident.clone(), variable_properties.clone());
+                        let peeked_token = tokens.peek().unwrap();
+                        match peeked_token.token_type {
+                            NewLine | SemiColon => {
+                                let elem_type_string = _type.to_string();
+                                for i in 0..size {
+                                    statement.push_str(&format!("    {elem_type_string} push 0\n"));
+                                }
+                                statement.push_str(&format!("    i64 push {size}\n"));
+                                statement.push_str(&format!("    i64 push top\n"));
+                                statement.push_str(&format!("    set %{ident}\n"));
+                            }
+                            _ => statement
+                                .push_str(&self.parse_assignment(tokens, variables, &ident)),
+                        }
                     }
                     _ => {
                         statement.push_str(&format!(
@@ -261,8 +289,7 @@ impl Parser {
                         variables.insert(ident.clone(), variable_properties);
                         let peeked_token = tokens.peek().unwrap();
                         match peeked_token.token_type {
-                            NewLine => {}
-                            SemiColon => {}
+                            NewLine | SemiColon => {}
                             _ => statement
                                 .push_str(&self.parse_assignment(tokens, variables, &ident)),
                         }
@@ -556,11 +583,13 @@ impl Parser {
                 let begin_loop_label =
                     format!("beginLoopL{}C{}", loop_token.line, loop_token.column);
                 let end_loop_label = format!("endLoopL{}C{}", loop_token.line, loop_token.column);
-                let first_statement = parser.parse_statement(tokens, variables, scope_return_type.clone());
+                let first_statement =
+                    parser.parse_statement(tokens, variables, scope_return_type.clone());
                 let expression_return =
                     parser.parse_expression(tokens, variables, TypeDescription::bool());
                 tokens.next();
-                let second_statement = parser.parse_statement(tokens, variables, scope_return_type.clone());
+                let second_statement =
+                    parser.parse_statement(tokens, variables, scope_return_type.clone());
                 dbg!(&expression_return);
                 statement.push_str(&first_statement);
                 statement.push_str(&format!("@{begin_loop_label}\n"));
@@ -1627,7 +1656,7 @@ impl Parser {
                                 }
                             }
                             TypeDef::Boolean => todo!(),
-                            TypeDef::Func(_) => todo!()
+                            TypeDef::Func(_) => todo!(),
                         },
                         _ => panic!("Proper error when a array element has a modifeir"),
                     }

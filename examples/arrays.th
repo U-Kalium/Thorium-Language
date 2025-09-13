@@ -6,7 +6,8 @@ let main() i64 {
         7,
         8, 9, 10, 11,
     ]; let b i64 = a[3]; a[0] = 69
-
+    var empty [5]i32
+    empty[3] = 10
     if b == 4 {
         finish a[0]
     } else {
