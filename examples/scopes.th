@@ -1,0 +1,9 @@
+let global i64 = 10
+
+let main() i64 {
+    let local i64 = 9
+    if local == 9 {
+        let local i64 = 8
+        finish local
+    }
+}

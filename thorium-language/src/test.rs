@@ -56,3 +56,12 @@ fn loops() {
     dbg!(result);
     assert!(result == 11)
 }
+
+#[test]
+fn scops() {
+    let file = include_str!("../../examples/scopes.th");
+    let byte_code = compiler::compile(file);
+    let result: i64 = vm::run(byte_code).unwrap();
+    dbg!(result);
+    assert!(result == 8)
+}
