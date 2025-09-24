@@ -31,6 +31,14 @@ fn array() {
 }
 
 #[test]
+fn equations() {
+    let file = include_str!("../../examples/equations.th");
+    let byte_code = compiler::compile(file);
+    let result: i64 = vm::run(byte_code).unwrap();
+    assert!(result == 420)
+}
+
+#[test]
 
 fn numbers() {
     let file = include_str!("../../examples/numbers.th");

@@ -1,5 +1,5 @@
-fn main() i32 {
-    return 420
+let main() i64 {
+    finish 420
 }
 
 

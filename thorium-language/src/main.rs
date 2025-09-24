@@ -44,7 +44,8 @@ fn  build_sub_command(args: &mut Args) {
 fn run_byte_sub_command(args: &mut Args) {
     if let Some(file_path) = args.next() {
         let file_content = fs::read_to_string(file_path).unwrap();
-        vm::run(file_content).unwrap()
+        let result: i64 = vm::run(file_content).unwrap();
+        println!("result: {result}")
 
     } else {
         panic!("expected file path")

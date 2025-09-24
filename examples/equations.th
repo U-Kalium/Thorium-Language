@@ -1,0 +1,3 @@
+let main() i64 {
+    finish (200 + 10) * 2
+}

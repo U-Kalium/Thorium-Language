@@ -2,13 +2,15 @@
 func $start "_start" :
     call $main
     return
+endfunc
 
 func $main:
-    declare %a
-    declare %b
+    i64 declare %a
+    i64 declare %b
     i64 push 69
     set %b
     i64 push 10
     set %a
-    get %a
+    get %b
+    return
 endfunc

@@ -13,4 +13,5 @@ let main() i64 {
     } else {
         finish b
     }
+    finish b
 }

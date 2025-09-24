@@ -4,5 +4,5 @@ let main() i64 {
         return 69
     }
     a = 10
-    return b
+    finish b
 }
