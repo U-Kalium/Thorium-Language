@@ -68,7 +68,8 @@ impl TypeDescription {
 pub struct Variable {
     pub variable_type: TypeDescription,
     pub is_mutable: bool,
-    pub ident: String
+    pub ident: String,
+    pub location: String
 }
 
 

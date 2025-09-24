@@ -1,3 +1,5 @@
+use std::fmt::format;
+
 use hashbrown::HashMap;
 
 use crate::compiler::syntax_tree::*;
@@ -7,6 +9,12 @@ impl FunctionDef {
     fn byte_code(&self, variables: &HashMap<String, Variable>, expression: &Expression) -> String {
         expression.byte_code(variables)
 
+    }
+}
+
+impl Variable {
+    fn mangle(&self) -> String {
+        mangle_with_location(self.ident.to_owned(), self.location.to_owned())
     }
 }
 
@@ -37,7 +45,7 @@ impl Expression {
         let mut byte_code = String::new();
         match &self.expression {
             ExpressionType::Variable(variable) => {
-                byte_code.push_str(&format!("    get %{}\n", variable.ident));
+                byte_code.push_str(&format!("    get %{}\n", variable.mangle()));
             }
             ExpressionType::Value { value } => match &self.expr_type {
                 TypeDescription {
@@ -70,7 +78,7 @@ impl Expression {
                 byte_code.push_str(&index.byte_code(variables));
                 byte_code.push_str("    i64 push 1\n");
                 byte_code.push_str("    i64 add\n");
-                byte_code.push_str(&format!("    cpy %{} - top top\n", variable.ident));
+                byte_code.push_str(&format!("    cpy %{} - top top\n", variable.mangle()));
             }
             ExpressionType::ArithmaticOp { op, lhs, rhs } => {
                 byte_code.push_str(&lhs.byte_code(variables));
@@ -194,6 +202,10 @@ impl Expression {
     }
 }
 
+fn mangle_with_location(ident: String, location: String) -> String {
+    format!("{ident}{location}")
+}
+
 impl Statement {
     fn byte_code(&self, variables: &HashMap<String, Variable>) -> String {
         let mut byte_code = String::new();
@@ -211,8 +223,9 @@ impl Statement {
                         },
                     is_mutable: false,
                     ident,
+                    location,
                 } => {
-                    byte_code.push_str(&format!("func ${ident}:\n"));
+                    byte_code.push_str(&format!("func ${}:\n", ident));
                     byte_code
                         .push_str(&function.byte_code(variables, &assignment.clone().unwrap()));
                     byte_code.push_str("endfunc\n");
@@ -225,11 +238,12 @@ impl Statement {
                         },
                     is_mutable: _,
                     ident,
+                    location,
                 } => {
-                    byte_code.push_str(&format!("    {} declare %{}\n", _type.to_string(), ident));
+                    byte_code.push_str(&format!("    {} declare %{}\n", _type.to_string(), mangle_with_location(ident.to_owned(), location.to_owned())));
                     if let Some(expr) = assignment {
                         byte_code.push_str(&expr.byte_code(variables));
-                        byte_code.push_str(&format!("    set %{ident}\n"));
+                        byte_code.push_str(&format!("    set %{}\n", mangle_with_location(ident.to_owned(), location.to_owned())));
                     }
                 }
                 Variable {
@@ -240,8 +254,9 @@ impl Statement {
                         },
                     is_mutable: _,
                     ident,
+                    location,
                 } => {
-                    byte_code.push_str(&format!("    i64 declare %{}\n", ident));
+                    byte_code.push_str(&format!("    i64 declare %{}\n", mangle_with_location(ident.to_owned(), location.to_owned())));
                     let elem_type_string = _type.to_string();
                     if let Some(expr) = assignment {
                         byte_code.push_str(&expr.byte_code(variables))
@@ -252,7 +267,7 @@ impl Statement {
                     }
                     byte_code.push_str(&format!("    i64 push {size}\n"));
                     byte_code.push_str(&format!("    i64 push top\n"));
-                    byte_code.push_str(&format!("    set %{ident}\n"));
+                    byte_code.push_str(&format!("    set %{}\n", mangle_with_location(ident.to_owned(), location.to_owned())));
                 }
                 var => todo!("{:?}", var),
             },
@@ -279,11 +294,11 @@ impl Statement {
                 if let Some(array_index) = array_index {
                     byte_code.push_str(&format!(
                         "    set stack %{} - {}\n",
-                        variable.ident,
+                        mangle_with_location(variable.ident.to_owned(), variable.location.to_owned()),
                         array_index + 1
                     ));
                 } else {
-                    byte_code.push_str(&format!("    set %{}\n", variable.ident));
+                    byte_code.push_str(&format!("    set %{}\n", variable.mangle()));
                 }
             }
             Statement::Empty => {}

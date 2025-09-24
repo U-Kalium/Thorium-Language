@@ -150,13 +150,14 @@ impl Parser {
         expected_type: TypeDescription,
         location: String
     ) -> Expression {
+        self.into_scope();
         let first_statement = self.parse_statement(tokens, TypeDescription::void());
         let condition = self.parse_expression(tokens, TypeDescription::bool());
         tokens.next().unwrap();
         let last_statement = self.parse_statement(tokens, TypeDescription::void());
         let expression = self.parse_expression(tokens, expected_type.clone());
         tokens.next().unwrap();
-
+        self.out_of_scope();
         Expression {
             expr_type: expected_type,
             expression: ExpressionType::ForLoop {
@@ -181,10 +182,12 @@ impl Parser {
             Ident(ident) => {
                 // token = tokens.next().unwrap();
                 let mut expression = None;
+                let location = format!("L{}C{}", token.line, token.column);
                 let variable = Variable {
                     variable_type: self.parse_type(tokens),
                     is_mutable: is_mutable,
                     ident: ident.to_owned(),
+                    location
                 };
                 self.insert_variable(ident.to_string(), variable.clone());
                 let peeked = tokens.peek().unwrap();
@@ -597,6 +600,9 @@ impl Parser {
                 Loop => {
                     tokens.back();
                     return parser.parse_loop_expr(tokens, expected_type);
+                }
+                NewLine => {
+                    return collect_expr(expected_type, tokens, parser);
                 }
                 wrong_token => panic!(
                     "Syntax Error: expected expression found {wrong_token:?} at {}:{}",
