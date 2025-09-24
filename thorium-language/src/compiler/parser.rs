@@ -1,13 +1,12 @@
 use std::collections::HashMap;
 
-
 use crate::compiler::syntax_tree::*;
 use crate::compiler::tokenizer::TokenType::*;
 use crate::compiler::tokenizer::{Token, TokenIter};
 struct Parser {
     highest_scope_return_type: Option<TypeDescription>,
     variables: Vec<HashMap<String, Variable>>,
-    scope_depth: usize
+    scope_depth: usize,
 }
 
 impl Parser {
@@ -15,7 +14,7 @@ impl Parser {
         Parser {
             highest_scope_return_type: None,
             variables: Vec::new(),
-            scope_depth: 0
+            scope_depth: 0,
         }
     }
 
@@ -69,10 +68,9 @@ impl Parser {
         let mut else_branch = None;
         token = tokens.next().unwrap();
         if let Else = token.token_type {
-            else_branch = Some(Box::new(self.parse_expression(
-                tokens,
-                expected_type.clone(),
-            )));
+            else_branch = Some(Box::new(
+                self.parse_expression(tokens, expected_type.clone()),
+            ));
             tokens.next().unwrap();
         }
         Expression {
@@ -108,7 +106,7 @@ impl Parser {
                     }
                 } else {
                     // for each loop
-                    self.parse_foreach_loop(tokens, expected_type)
+                    self.parse_foreach_loop(tokens, expected_type, location)
                 }
             }
             True => self.parse_while_loop(tokens, expected_type, location),
@@ -140,15 +138,82 @@ impl Parser {
         &mut self,
         tokens: &mut TokenIter,
         expected_type: TypeDescription,
+        location: String,
     ) -> Expression {
-        todo!()
+        self.into_scope();
+        let element_ident;
+        let element_type;
+        let iterator;
+        let iterator_size;
+        if let Ident(ident) = tokens.next().unwrap().token_type {
+            element_ident = ident
+        } else {
+            panic!("Syntax Error: expected ident for foreach loop")
+        }
+        if let In = tokens.next().unwrap().token_type {
+        } else {
+            panic!("Syntax Error: expected in for foreach loop")
+        }
+        if let Ident(ident) = tokens.next().unwrap().token_type {
+            if let Some(variable) = self.get_variable(&ident) {
+                match variable {
+                    Variable {
+                        variable_type:
+                            TypeDescription {
+                                modifier: ModifierType::FixedArray(size),
+                                _type,
+                            },
+                        is_mutable: _,
+                        ident: _,
+                        location: _,
+                    } => {
+                        iterator_size = *size;
+                        element_type = TypeDescription {
+                            modifier: ModifierType::None,
+                            _type: _type.clone(),
+                        }
+                    }
+                    _ => todo!(),
+                }
+                iterator = variable.clone()
+            } else {
+                panic!("variable {ident} has not been declared")
+            }
+        } else {
+            panic!("Syntax Error: expected array ident for foreach loop")
+        }
+        let element = Variable {
+            variable_type: element_type,
+            is_mutable: false,
+            ident: element_ident.clone(),
+            location: location.clone(),
+        };
+        self.insert_variable(element_ident.to_string(), element.clone());
+        let element_decleration = Statement::VariableDecleration {
+            variable: element.clone(),
+            assignment: None,
+        };
+        let expression = self.parse_expression(tokens, expected_type.clone());
+        tokens.next().unwrap();
+        self.out_of_scope();
+        Expression {
+            expr_type: expected_type,
+            expression: ExpressionType::ForEachLoop {
+                location,
+                element_declaration: Box::new(element_decleration),
+                element: element,
+                iterator,
+                expression: Box::new(expression),
+                iterator_size
+            },
+        }
     }
 
     fn parse_for_loop(
         &mut self,
         tokens: &mut TokenIter,
         expected_type: TypeDescription,
-        location: String
+        location: String,
     ) -> Expression {
         self.into_scope();
         let first_statement = self.parse_statement(tokens, TypeDescription::void());
@@ -187,7 +252,7 @@ impl Parser {
                     variable_type: self.parse_type(tokens),
                     is_mutable: is_mutable,
                     ident: ident.to_owned(),
-                    location
+                    location,
                 };
                 self.insert_variable(ident.to_string(), variable.clone());
                 let peeked = tokens.peek().unwrap();
@@ -241,11 +306,7 @@ impl Parser {
         TypeDef::Func(func_type)
     }
 
-    fn parse_scope(
-        &mut self,
-        tokens: &mut TokenIter,
-        return_type: TypeDescription,
-    ) -> Expression {
+    fn parse_scope(&mut self, tokens: &mut TokenIter, return_type: TypeDescription) -> Expression {
         self.into_scope();
         // let mut variables = HashMap::new();
         // let mut scope = Expression {
@@ -371,8 +432,7 @@ impl Parser {
             }
             Return => {
                 tokens.next();
-                let expression =
-                    self.parse_expression(tokens, scope_return_type.clone());
+                let expression = self.parse_expression(tokens, scope_return_type.clone());
                 if scope_return_type != expression.expr_type {
                     todo!("Proper Error for handeling scope return and expression type mismatch");
                 }
@@ -426,8 +486,7 @@ impl Parser {
                                 todo!("Proper error for indexing out of array bounds")
                             }
                         }
-                        let expression =
-                            self.parse_assignment(tokens, &variable);
+                        let expression = self.parse_assignment(tokens, &variable);
 
                         statement = Statement::Assignment {
                             variable: variable.clone(),
@@ -435,8 +494,7 @@ impl Parser {
                             array_index: Some(array_index),
                         }
                     } else {
-                        let expression =
-                            self.parse_assignment(tokens, &variable);
+                        let expression = self.parse_assignment(tokens, &variable);
                         statement = Statement::Assignment {
                             variable: variable.clone(),
                             expression: expression,
@@ -489,8 +547,7 @@ impl Parser {
                     modifier: ModifierType::None,
                     _type: TypeDef::from_int(IntegerDef::I64),
                 };
-                let mut rhs =
-                    collect_expr(TypeDescription::default_int(), tokens, parser);
+                let mut rhs = collect_expr(TypeDescription::default_int(), tokens, parser);
                 match &mut rhs {
                     Expression {
                         expr_type,
@@ -662,11 +719,8 @@ impl Parser {
                         ),
                         OpenSquareBracket => {
                             tokens.next();
-                            let index = collect_expr(
-                                TypeDescription::default_int(),
-                                tokens,
-                                parser,
-                            );
+                            let index =
+                                collect_expr(TypeDescription::default_int(), tokens, parser);
                             let next_token = tokens.next().unwrap();
                             if let CloseSquareBracket = next_token.token_type {
                             } else {
@@ -690,46 +744,22 @@ impl Parser {
                         }
                         Add => {
                             tokens.back();
-                            let expr = collect_arith_expr(
-                                expected_type,
-                                tokens,
-                                parser,
-                                0,
-                                None,
-                            );
+                            let expr = collect_arith_expr(expected_type, tokens, parser, 0, None);
                             expr
                         }
                         Star => {
                             tokens.back();
-                            let expr = collect_arith_expr(
-                                expected_type,
-                                tokens,
-                                parser,
-                                0,
-                                None,
-                            );
+                            let expr = collect_arith_expr(expected_type, tokens, parser, 0, None);
                             expr
                         }
                         Minus => {
                             tokens.back();
-                            let expr = collect_arith_expr(
-                                expected_type,
-                                tokens,
-                                parser,
-                                0,
-                                None,
-                            );
+                            let expr = collect_arith_expr(expected_type, tokens, parser, 0, None);
                             expr
                         }
                         ForwardSlash => {
                             tokens.back();
-                            let expr = collect_arith_expr(
-                                expected_type,
-                                tokens,
-                                parser,
-                                0,
-                                None,
-                            );
+                            let expr = collect_arith_expr(expected_type, tokens, parser, 0, None);
                             expr
                         }
                         CloseSquareBracket => {
@@ -800,13 +830,7 @@ impl Parser {
                 if let Some(token) = tokens.next() {
                     match token.token_type {
                         OpenBracket => {
-                            let expr = collect_arith_expr(
-                                expected_type,
-                                tokens,
-                                parser,
-                                0,
-                                None,
-                            );
+                            let expr = collect_arith_expr(expected_type, tokens, parser, 0, None);
                             let token = tokens.next().unwrap();
                             if token.token_type != CloseBracket {
                                 todo!("Proper Error for unmatched '('")
@@ -892,13 +916,7 @@ impl Parser {
                         return atom_lhs;
                     } else if token.is_bin_op() {
                         tokens.back();
-                        collect_arith_expr(
-                            expected_type.clone(),
-                            tokens,
-                            parser,
-                            0,
-                            Some(atom_lhs),
-                        )
+                        collect_arith_expr(expected_type.clone(), tokens, parser, 0, Some(atom_lhs))
                     } else {
                         return atom_lhs;
                     }
@@ -945,17 +963,13 @@ impl Parser {
 
                     match &token.token_type {
                         NumberLit(_) => {
-                            let expression = state.parse_expression(
-                                tokens,
-                                variable_to_be_assign_type,
-                            );
+                            let expression =
+                                state.parse_expression(tokens, variable_to_be_assign_type);
                             expression
                         }
                         Ident(_) => {
-                            let expression = state.parse_expression(
-                                tokens,
-                                variable_to_be_assign_type,
-                            );
+                            let expression =
+                                state.parse_expression(tokens, variable_to_be_assign_type);
                             expression
                         }
                         True => {
@@ -1022,20 +1036,10 @@ impl Parser {
         }
         match &peeked_token.token_type {
             OpenCurlyBracket => {
-                parse_value_assignment(
-                    &peeked_token,
-                    self,
-                    tokens,
-                    variable_to_be_assign_type,
-                )
+                parse_value_assignment(&peeked_token, self, tokens, variable_to_be_assign_type)
             }
             Equal => {
-                parse_value_assignment(
-                    &peeked_token,
-                    self,
-                    tokens,
-                    variable_to_be_assign_type,
-                )
+                parse_value_assignment(&peeked_token, self, tokens, variable_to_be_assign_type)
             }
             t => panic!(
                 "Syntax Error: expected {{}} or = , found {t:?} at {}:{} ",
@@ -1059,10 +1063,7 @@ impl Parser {
                     if elem_index > size {
                         todo!("Proper Error for when an array expr is longer than array type")
                     }
-                    elements.push(self.parse_expression(
-                        tokens,
-                        array_type.strip_modifiers(),
-                    ));
+                    elements.push(self.parse_expression(tokens, array_type.strip_modifiers()));
 
                     token = tokens.next().unwrap();
                     if let Comma = token.token_type {

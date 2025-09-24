@@ -4,11 +4,9 @@ use hashbrown::HashMap;
 
 use crate::compiler::syntax_tree::*;
 
-
 impl FunctionDef {
     fn byte_code(&self, variables: &HashMap<String, Variable>, expression: &Expression) -> String {
         expression.byte_code(variables)
-
     }
 }
 
@@ -119,9 +117,7 @@ impl Expression {
                 let end_loop_label = format!("endLoop{location}");
                 byte_code.push_str(&format!("@{begin_loop_label}\n"));
                 byte_code.push_str(&condition.byte_code(variables));
-                byte_code.push_str(&format!(
-                    "    i8 jpz \"{end_loop_label}\""
-                ));
+                byte_code.push_str(&format!("    i8 jpz \"{end_loop_label}\""));
                 byte_code.push_str(&expression.byte_code(variables));
                 byte_code.push_str(&format!("    i8 push 1\n"));
                 byte_code.push_str(&format!("    i8 jmp \"{begin_loop_label}\"\n"));
@@ -139,16 +135,101 @@ impl Expression {
                 byte_code.push_str(&first_statement.byte_code(variables));
                 byte_code.push_str(&format!("@{begin_loop_label}\n"));
                 byte_code.push_str(&condition.byte_code(variables));
-                byte_code.push_str(&format!(
-                    "    i8 jpz \"{end_loop_label}\""
-                ));
+                byte_code.push_str(&format!("    i8 jpz \"{end_loop_label}\""));
                 byte_code.push_str(&expression.byte_code(variables));
                 byte_code.push_str(&last_statement.byte_code(variables));
                 byte_code.push_str(&format!("    i8 push 1\n"));
                 byte_code.push_str(&format!("    i8 jmp \"{begin_loop_label}\"\n"));
                 byte_code.push_str(&format!("@{end_loop_label}\n"));
-
-            },
+            }
+            ExpressionType::ForEachLoop {
+                location,
+                element_declaration,
+                element,
+                iterator,
+                expression,
+                iterator_size,
+            } => {
+                let begin_loop_label = format!("beginLoop{location}");
+                let end_loop_label = format!("endLoop{location}");
+                let for_each_index_ident = format!("forEachIndex");
+                let for_each_index_variable = Variable {
+                    variable_type: TypeDescription::default_int(),
+                    is_mutable: true,
+                    ident: for_each_index_ident,
+                    location: location.to_owned(),
+                };
+                let for_each_index_declaration = Statement::VariableDecleration {
+                    variable: for_each_index_variable.clone(),
+                    assignment: Some(Expression {
+                        expr_type: TypeDescription::default_int(),
+                        expression: ExpressionType::Value {
+                            value: Value::Number("0".to_string()),
+                        },
+                    }),
+                };
+                let for_each_index_increment = Statement::Assignment {
+                    variable: for_each_index_variable.clone(),
+                    expression: Expression {
+                        expr_type: TypeDescription::default_int(),
+                        expression: ExpressionType::ArithmaticOp {
+                            op: ArithmaticOp::Addition,
+                            lhs: Box::new(Expression {
+                                expr_type: TypeDescription::default_int(),
+                                expression: ExpressionType::Variable(
+                                    for_each_index_variable.clone(),
+                                ),
+                            }),
+                            rhs: Box::new(Expression {
+                                expr_type: TypeDescription::default_int(),
+                                expression: ExpressionType::Value {
+                                    value: Value::Number("1".to_string()),
+                                },
+                            }),
+                        },
+                    },
+                    array_index: None,
+                };
+                let element_assignment = Statement::Assignment {
+                    variable: element.clone(),
+                    expression: Expression {
+                        expr_type: element.variable_type.clone(),
+                        expression: ExpressionType::IndexedArray {
+                            variable: iterator.clone(),
+                            index: Box::new(Expression {
+                                expr_type: TypeDescription::default_int(),
+                                expression: ExpressionType::Variable(for_each_index_variable.clone()),
+                            }),
+                        },
+                    },
+                    array_index: None,
+                };
+                let loop_check = Expression {
+                    expr_type: TypeDescription::bool(),
+                    expression: ExpressionType::ConditionalOp {
+                        condition: Condition::LessThan,
+                        lhs: Box::new(Expression {
+                            expr_type: TypeDescription::default_int(),
+                            expression: ExpressionType::Variable(for_each_index_variable)
+                        }),
+                        rhs: Box::new(Expression {
+                            expr_type: TypeDescription::default_int(),
+                            expression: ExpressionType::Value { value: Value::Number(iterator_size.to_string()) }
+                        }),
+                    },
+                };
+                byte_code.push_str(&for_each_index_declaration.byte_code(variables));
+                byte_code.push_str(&element_declaration.byte_code(variables));
+                byte_code.push_str(&format!("@{begin_loop_label}\n"));
+                byte_code.push_str(&loop_check.byte_code(variables));
+                byte_code.push_str(&format!("    i8 jpz \"{end_loop_label}\""));
+                byte_code.push_str(&element_assignment.byte_code(variables));
+                byte_code.push_str(&expression.byte_code(variables));
+                byte_code.push_str(&for_each_index_increment.byte_code(variables));
+                byte_code.push_str(&format!("    i8 push 1\n"));
+                byte_code.push_str(&format!("    i8 jmp \"{begin_loop_label}\"\n"));
+                byte_code.push_str(&format!("@{end_loop_label}\n"));
+            }
             ExpressionType::ArrayLit { elements } => {
                 for element in elements.clone().iter_mut().rev() {
                     match element {
@@ -240,10 +321,17 @@ impl Statement {
                     ident,
                     location,
                 } => {
-                    byte_code.push_str(&format!("    {} declare %{}\n", _type.to_string(), mangle_with_location(ident.to_owned(), location.to_owned())));
+                    byte_code.push_str(&format!(
+                        "    {} declare %{}\n",
+                        _type.to_string(),
+                        mangle_with_location(ident.to_owned(), location.to_owned())
+                    ));
                     if let Some(expr) = assignment {
                         byte_code.push_str(&expr.byte_code(variables));
-                        byte_code.push_str(&format!("    set %{}\n", mangle_with_location(ident.to_owned(), location.to_owned())));
+                        byte_code.push_str(&format!(
+                            "    set %{}\n",
+                            mangle_with_location(ident.to_owned(), location.to_owned())
+                        ));
                     }
                 }
                 Variable {
@@ -256,7 +344,10 @@ impl Statement {
                     ident,
                     location,
                 } => {
-                    byte_code.push_str(&format!("    i64 declare %{}\n", mangle_with_location(ident.to_owned(), location.to_owned())));
+                    byte_code.push_str(&format!(
+                        "    i64 declare %{}\n",
+                        mangle_with_location(ident.to_owned(), location.to_owned())
+                    ));
                     let elem_type_string = _type.to_string();
                     if let Some(expr) = assignment {
                         byte_code.push_str(&expr.byte_code(variables))
@@ -267,7 +358,10 @@ impl Statement {
                     }
                     byte_code.push_str(&format!("    i64 push {size}\n"));
                     byte_code.push_str(&format!("    i64 push top\n"));
-                    byte_code.push_str(&format!("    set %{}\n", mangle_with_location(ident.to_owned(), location.to_owned())));
+                    byte_code.push_str(&format!(
+                        "    set %{}\n",
+                        mangle_with_location(ident.to_owned(), location.to_owned())
+                    ));
                 }
                 var => todo!("{:?}", var),
             },
@@ -294,7 +388,10 @@ impl Statement {
                 if let Some(array_index) = array_index {
                     byte_code.push_str(&format!(
                         "    set stack %{} - {}\n",
-                        mangle_with_location(variable.ident.to_owned(), variable.location.to_owned()),
+                        mangle_with_location(
+                            variable.ident.to_owned(),
+                            variable.location.to_owned()
+                        ),
                         array_index + 1
                     ));
                 } else {

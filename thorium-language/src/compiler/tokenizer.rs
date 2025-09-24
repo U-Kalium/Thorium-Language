@@ -40,6 +40,7 @@ pub enum TokenType {
     LessEqual,
     GreatEqual,
     Eof,
+    In,
 }
 #[derive(Debug, Clone)]
 pub struct Token {
@@ -224,6 +225,12 @@ pub fn tokanize(content: String) -> Vec<Token> {
             } else if &buffer == &String::from("loop") {
                 tokens.push(Token {
                     token_type: TokenType::Loop,
+                    line: file_line,
+                    column: column - buffer.len() as u32,
+                });
+            } else if &buffer == &String::from("in") {
+                tokens.push(Token {
+                    token_type: TokenType::In,
                     line: file_line,
                     column: column - buffer.len() as u32,
                 });

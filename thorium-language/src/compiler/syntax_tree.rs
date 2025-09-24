@@ -275,6 +275,14 @@ pub enum ExpressionType {
         last_statement: Box<Statement>,
         expression: Box<Expression>
     },
+    ForEachLoop {
+        location: String,
+        element_declaration: Box<Statement>,
+        element: Variable,
+        iterator: Variable,
+        expression: Box<Expression>,
+        iterator_size: usize,
+    },
     ArrayLit {
         elements: Vec<Expression>
     }

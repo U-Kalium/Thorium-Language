@@ -8,10 +8,20 @@ let main() i64 {
     if while_number < 10000001 {
         finish 1
     }
+    var test_array [10]i64 = [
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+    ]
 
     var for_number i64 = 0;
     loop var i i64 = 0; i <= 20; i = i + 2; {
         for_number = for_number + 1
     }
-    finish for_number
+
+    loop i in test_array {
+        if i == 8 {
+            finish for_number
+        }
+    }
+
+    finish 0
 }
