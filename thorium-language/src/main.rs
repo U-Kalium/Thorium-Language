@@ -7,7 +7,7 @@ mod test;
 
 fn main() {
     let mut command_line_args = env::args();
-    let exec_name = command_line_args.next().unwrap();
+    command_line_args.next().unwrap();
     if let Some(arg) = command_line_args.next() {
         match arg.as_str() {
             "run" => run_sub_command(&mut command_line_args),

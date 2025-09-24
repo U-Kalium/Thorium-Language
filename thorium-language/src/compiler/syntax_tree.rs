@@ -64,11 +64,6 @@ impl TypeDescription {
 }
 
 #[derive(Debug, Clone)]
-pub struct VariableProperties {
-    pub variable_type: TypeDescription,
-    pub is_mutable: bool,
-}
-#[derive(Debug, Clone)]
 
 pub struct Variable {
     pub variable_type: TypeDescription,
@@ -106,7 +101,7 @@ impl TypeDef {
         match self {
             TypeDef::Number(number_def) => number_def.to_string(),
             TypeDef::Boolean => "i8".to_string(),
-            TypeDef::Func(func) => todo!(),
+            TypeDef::Func(_) => todo!(),
             TypeDef::Void => todo!()
         }
     }
@@ -174,16 +169,9 @@ impl FloatDef {
 }
 
 
-
-#[derive(Debug)]
-pub struct ExpressionReturn {
-    pub byte_code: String,
-    pub expression_type: TypeDescription,
-}
 #[derive(Debug, Clone)]
 
 pub enum Value {
-    Custom(String),
     Number(String),
     Boolean(bool)
 }
@@ -191,7 +179,6 @@ pub enum Value {
 impl Value {
     pub fn to_byte_code(&self) -> String {
         match self {
-            Value::Custom(_) => todo!(),
             Value::Number(num) => num.clone(),
             Value::Boolean(bool) => {
                 if *bool {
