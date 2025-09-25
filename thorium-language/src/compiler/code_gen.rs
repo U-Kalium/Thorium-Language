@@ -46,18 +46,17 @@ impl Expression {
                 byte_code.push_str(&format!("    get %{}\n", variable.mangle()));
             }
             ExpressionType::Value { value } => match &self.expr_type {
-                TypeDescription {
-                    modifier: ModifierType::None,
-                    _type,
-                } => {
+                TypeDescription::ModifiedType { modifier, _type } => {
+                    todo!("proper bytecode for expression type {:?}", self)
+                }
+
+                _ => {
                     byte_code.push_str(&format!(
                         "    {} push {}\n",
-                        self.expr_type._type.to_string(),
+                        self.expr_type.to_string(),
                         value.to_byte_code()
                     ));
                 }
-
-                _ => todo!("proper bytecode for expression type {:?}", self),
             },
             ExpressionType::ConditionalOp {
                 condition,
@@ -68,7 +67,7 @@ impl Expression {
                 byte_code.push_str(&rhs.byte_code(variables));
                 byte_code.push_str(&format!(
                     "    {} {}\n",
-                    self.expr_type._type.to_string(),
+                    self.expr_type.to_string(),
                     condition.to_byte_code()
                 ));
             }
@@ -83,7 +82,7 @@ impl Expression {
                 byte_code.push_str(&rhs.byte_code(variables));
                 byte_code.push_str(&format!(
                     "    {} {}\n",
-                    self.expr_type._type.to_string(),
+                    self.expr_type.to_string(),
                     op.to_byte_code()
                 ));
             }
@@ -198,7 +197,9 @@ impl Expression {
                             variable: iterator.clone(),
                             index: Box::new(Expression {
                                 expr_type: TypeDescription::default_int(),
-                                expression: ExpressionType::Variable(for_each_index_variable.clone()),
+                                expression: ExpressionType::Variable(
+                                    for_each_index_variable.clone(),
+                                ),
                             }),
                         },
                     },
@@ -210,11 +211,13 @@ impl Expression {
                         condition: Condition::LessThan,
                         lhs: Box::new(Expression {
                             expr_type: TypeDescription::default_int(),
-                            expression: ExpressionType::Variable(for_each_index_variable)
+                            expression: ExpressionType::Variable(for_each_index_variable),
                         }),
                         rhs: Box::new(Expression {
                             expr_type: TypeDescription::default_int(),
-                            expression: ExpressionType::Value { value: Value::Number(iterator_size.to_string()) }
+                            expression: ExpressionType::Value {
+                                value: Value::Number(iterator_size.to_string()),
+                            },
                         }),
                     },
                 };
@@ -232,45 +235,21 @@ impl Expression {
             }
             ExpressionType::ArrayLit { elements } => {
                 for element in elements.clone().iter_mut().rev() {
-                    match element {
-                        Expression {
-                            expr_type:
-                                TypeDescription {
-                                    modifier: ModifierType::None,
-                                    _type,
-                                },
-                            expression: _,
-                        } => match _type {
-                            TypeDef::Number(_) => {
-                                // if array_type._type.clone().is_number() {
-                                //     element.expr_type._type = self.expression.
-                                // }
-                                if self.expr_type._type.clone().is_number() {
-                                    element.expr_type._type = self.expr_type._type.clone()
-                                }
+                    match &element.expr_type {
+                        TypeDescription::Number(_) => {
+                            // if array_type._type.clone().is_number() {
+                            //     element.expr_type._type = self.expression.
+                            // }
+                            if self.expr_type.clone().is_number() {
+                                element.expr_type = self.expr_type.clone()
                             }
-                            TypeDef::Boolean => todo!(),
-                            TypeDef::Func(_) => todo!(),
-                            TypeDef::Void => todo!(),
-                        },
-                        _ => panic!("Proper error when a array element has a modifeir"),
-                        // ExpressionReturn {
-                        //     byte_code: _,
-                        //     expression_type:
-                        //         TypeDescription {
-                        //             modifier: ModifierType::None,
-                        //             _type,
-                        //         },
-                        // } => match _type {
-                        //     TypeDef::Number(_) => {
-                        //         if array_type._type.clone().is_number() {
-                        //             element.expression_type._type = array_type.clone()._type
-                        //         }
-                        //     }
-                        //     TypeDef::Boolean => todo!(),
-                        //     TypeDef::Func(_) => todo!(),
-                        // },
-                        // _ => panic!("Proper error when a array element has a modifeir"),
+                        }
+                        TypeDescription::Boolean => todo!(),
+                        TypeDescription::Func(_) => todo!(),
+                        TypeDescription::Void => todo!(),
+                        TypeDescription::ModifiedType { modifier: _, _type } => {
+                            panic!("Proper error when a array element has a modifeir")
+                        }
                     }
 
                     byte_code.push_str(&element.byte_code(variables));
@@ -297,11 +276,7 @@ impl Statement {
                 assignment,
             } => match variable {
                 Variable {
-                    variable_type:
-                        TypeDescription {
-                            modifier: ModifierType::None,
-                            _type: TypeDef::Func(function),
-                        },
+                    variable_type: TypeDescription::Func(function),
                     is_mutable: false,
                     ident,
                     location,
@@ -312,18 +287,43 @@ impl Statement {
                     byte_code.push_str("endfunc\n");
                 }
                 Variable {
-                    variable_type:
-                        TypeDescription {
-                            modifier: ModifierType::None,
-                            _type,
-                        },
+                    variable_type: TypeDescription::ModifiedType { modifier, _type },
+                    is_mutable: _,
+                    ident,
+                    location,
+                } => match modifier {
+                    TypeModifier::FixedArray(size) => {
+                        byte_code.push_str(&format!(
+                            "    i64 declare %{}\n",
+                            mangle_with_location(ident.to_owned(), location.to_owned())
+                        ));
+                        let elem_type_string = _type.to_string();
+                        if let Some(expr) = assignment {
+                            byte_code.push_str(&expr.byte_code(variables))
+                        } else {
+                            for _ in 0..*size {
+                                byte_code.push_str(&format!("    {elem_type_string} push 0\n"));
+                            }
+                        }
+                        byte_code.push_str(&format!("    i64 push {size}\n"));
+                        byte_code.push_str(&format!("    i64 push top\n"));
+                        byte_code.push_str(&format!(
+                            "    set %{}\n",
+                            mangle_with_location(ident.to_owned(), location.to_owned())
+                        ));
+                    }
+                    TypeModifier::DynamicArray => todo!(),
+                    TypeModifier::None => todo!(),
+                },
+                Variable {
+                    variable_type,
                     is_mutable: _,
                     ident,
                     location,
                 } => {
                     byte_code.push_str(&format!(
                         "    {} declare %{}\n",
-                        _type.to_string(),
+                        variable_type.to_string(),
                         mangle_with_location(ident.to_owned(), location.to_owned())
                     ));
                     if let Some(expr) = assignment {
@@ -333,35 +333,6 @@ impl Statement {
                             mangle_with_location(ident.to_owned(), location.to_owned())
                         ));
                     }
-                }
-                Variable {
-                    variable_type:
-                        TypeDescription {
-                            modifier: ModifierType::FixedArray(size),
-                            _type,
-                        },
-                    is_mutable: _,
-                    ident,
-                    location,
-                } => {
-                    byte_code.push_str(&format!(
-                        "    i64 declare %{}\n",
-                        mangle_with_location(ident.to_owned(), location.to_owned())
-                    ));
-                    let elem_type_string = _type.to_string();
-                    if let Some(expr) = assignment {
-                        byte_code.push_str(&expr.byte_code(variables))
-                    } else {
-                        for _ in 0..*size {
-                            byte_code.push_str(&format!("    {elem_type_string} push 0\n"));
-                        }
-                    }
-                    byte_code.push_str(&format!("    i64 push {size}\n"));
-                    byte_code.push_str(&format!("    i64 push top\n"));
-                    byte_code.push_str(&format!(
-                        "    set %{}\n",
-                        mangle_with_location(ident.to_owned(), location.to_owned())
-                    ));
                 }
                 var => todo!("{:?}", var),
             },
@@ -373,7 +344,7 @@ impl Statement {
                 byte_code.push_str("    return\n");
             }
             Statement::Expression(expression) => {
-                if let TypeDef::Void = expression.expr_type._type {
+                if let TypeDescription::Void = expression.expr_type {
                 } else {
                     panic!("Found expression without void type when expression with void type ")
                 }
@@ -457,13 +428,13 @@ fn parse_if(
     if let Some(else_expr) = else_branch {
         expr_string.push_str(&format!(
             "    {} jmp \"{if_label}\"\n",
-            condition.expr_type.strip_modifiers()._type.to_string()
+            condition.expr_type.strip_modifiers().to_string()
         ));
         parse_else(else_expr, merge_label.clone(), variables, expr_string);
     } else {
         expr_string.push_str(&format!(
             "    {} jpz \"{merge_label}\"\n",
-            condition.expr_type.strip_modifiers()._type.to_string()
+            condition.expr_type.strip_modifiers().to_string()
         ));
     }
     expr_string.push_str(&format!("@{if_label}\n"));

@@ -159,8 +159,8 @@ impl Parser {
                 match variable {
                     Variable {
                         variable_type:
-                            TypeDescription {
-                                modifier: ModifierType::FixedArray(size),
+                            TypeDescription::ModifiedType {
+                                modifier: TypeModifier::FixedArray(size),
                                 _type,
                             },
                         is_mutable: _,
@@ -168,10 +168,7 @@ impl Parser {
                         location: _,
                     } => {
                         iterator_size = *size;
-                        element_type = TypeDescription {
-                            modifier: ModifierType::None,
-                            _type: _type.clone(),
-                        }
+                        element_type = *_type.clone()
                     }
                     _ => todo!(),
                 }
@@ -204,7 +201,7 @@ impl Parser {
                 element: element,
                 iterator,
                 expression: Box::new(expression),
-                iterator_size
+                iterator_size,
             },
         }
     }
@@ -273,7 +270,7 @@ impl Parser {
         }
     }
 
-    fn parse_func_type(&mut self, tokens: &mut TokenIter) -> TypeDef {
+    fn parse_func_type(&mut self, tokens: &mut TokenIter) -> TypeDescription {
         let mut func_type = FunctionDef::new();
         let mut token = tokens.next().unwrap();
         match &token.token_type {
@@ -303,7 +300,7 @@ impl Parser {
         let return_type = self.parse_type(tokens);
         func_type.returns = Box::new(return_type);
 
-        TypeDef::Func(func_type)
+        TypeDescription::Func(func_type)
     }
 
     fn parse_scope(&mut self, tokens: &mut TokenIter, return_type: TypeDescription) -> Expression {
@@ -344,20 +341,18 @@ impl Parser {
     }
 
     fn parse_type(&mut self, tokens: &mut TokenIter) -> TypeDescription {
-        let mut parsed_type = TypeDescription {
-            modifier: ModifierType::None,
-            _type: TypeDef::new(),
-        };
-        fn parse_standalone_type(parser: &mut Parser, tokens: &mut TokenIter) -> TypeDef {
+        let mut parsed_type = TypeDescription::new();
+
+        fn parse_standalone_type(parser: &mut Parser, tokens: &mut TokenIter) -> TypeDescription {
             let token = tokens.next().unwrap();
             match &token.token_type {
-                I64 => TypeDef::Number(NumberDef::Integer(IntegerDef::I64)),
-                I32 => TypeDef::Number(NumberDef::Integer(IntegerDef::I32)),
-                I16 => TypeDef::Number(NumberDef::Integer(IntegerDef::I16)),
-                I8 => TypeDef::Number(NumberDef::Integer(IntegerDef::I8)),
-                F64 => TypeDef::Number(NumberDef::Float(FloatDef::F64)),
-                F32 => TypeDef::Number(NumberDef::Float(FloatDef::F32)),
-                Bool => TypeDef::Boolean,
+                I64 => TypeDescription::Number(NumberDef::Integer(IntegerDef::I64)),
+                I32 => TypeDescription::Number(NumberDef::Integer(IntegerDef::I32)),
+                I16 => TypeDescription::Number(NumberDef::Integer(IntegerDef::I16)),
+                I8 => TypeDescription::Number(NumberDef::Integer(IntegerDef::I8)),
+                F64 => TypeDescription::Number(NumberDef::Float(FloatDef::F64)),
+                F32 => TypeDescription::Number(NumberDef::Float(FloatDef::F32)),
+                Bool => TypeDescription::Boolean,
                 OpenBracket => {
                     tokens.back();
                     parser.parse_func_type(tokens)
@@ -369,7 +364,7 @@ impl Parser {
                 ),
             }
         }
-        fn parse_dependent_type(tokens: &mut TokenIter) -> ModifierType {
+        fn parse_dependent_type(tokens: &mut TokenIter) -> TypeModifier {
             let mut token = tokens.peek().unwrap();
             match token.token_type {
                 OpenSquareBracket => {
@@ -380,7 +375,7 @@ impl Parser {
                             token = tokens.next().unwrap();
                             match &token.token_type {
                                 CloseSquareBracket => {
-                                    ModifierType::FixedArray(num.parse().unwrap())
+                                    TypeModifier::FixedArray(num.parse().unwrap())
                                 }
                                 t => panic!(
                                     "Syntax Error: expected array parem, found {t:?} at {}:{} ",
@@ -394,11 +389,18 @@ impl Parser {
                         ),
                     }
                 }
-                _ => ModifierType::None,
+                _ => TypeModifier::None,
             }
         }
-        parsed_type.modifier = parse_dependent_type(tokens);
-        parsed_type._type = parse_standalone_type(self, tokens);
+        let modifier = parse_dependent_type(tokens);
+        if let TypeModifier::None = modifier {
+            parsed_type = parse_standalone_type(self, tokens);
+        } else {
+            parsed_type = TypeDescription::ModifiedType {
+                modifier,
+                _type: Box::new(parse_standalone_type(self, tokens)),
+            }
+        }
 
         parsed_type
     }
@@ -479,13 +481,16 @@ impl Parser {
                             todo!("Proper error for when a ] isnt used to end array indexing")
                         }
                         // out of bounds check
-                        if let ModifierType::FixedArray(array_size) =
-                            variable.variable_type.modifier
+                        if let TypeDescription::ModifiedType {
+                            modifier: TypeModifier::FixedArray(array_size),
+                            _type: _,
+                        } = variable.variable_type
                         {
                             if array_index >= array_size {
                                 todo!("Proper error for indexing out of array bounds")
                             }
                         }
+
                         let expression = self.parse_assignment(tokens, &variable);
 
                         statement = Statement::Assignment {
@@ -543,10 +548,7 @@ impl Parser {
         ) -> Expression {
             tokens.next();
             if let Some(_) = tokens.peek() {
-                let num_type = TypeDescription {
-                    modifier: ModifierType::None,
-                    _type: TypeDef::from_int(IntegerDef::I64),
-                };
+                let num_type = TypeDescription::from_int(IntegerDef::I64);
                 let mut rhs = collect_expr(TypeDescription::default_int(), tokens, parser);
                 match &mut rhs {
                     Expression {
@@ -729,10 +731,7 @@ impl Parser {
                                 )
                             }
                             let var = parser.get_variable(num_or_ident).unwrap();
-                            let _type = TypeDescription {
-                                modifier: ModifierType::None,
-                                _type: var.variable_type._type.clone(),
-                            };
+                            let _type = var.variable_type.strip_modifiers();
                             let expr_type = ExpressionType::IndexedArray {
                                 variable: var.clone(),
                                 index: Box::new(index),
@@ -771,10 +770,7 @@ impl Parser {
                                 };
                             } else {
                                 return Expression {
-                                    expr_type: TypeDescription {
-                                        modifier: ModifierType::None,
-                                        _type: expected_type._type,
-                                    },
+                                    expr_type: expected_type.strip_modifiers(),
                                     expression: ExpressionType::Value {
                                         value: Value::Number(num_or_ident.clone()),
                                     },
@@ -790,10 +786,7 @@ impl Parser {
                                 };
                             } else {
                                 return Expression {
-                                    expr_type: TypeDescription {
-                                        modifier: ModifierType::None,
-                                        _type: expected_type._type,
-                                    },
+                                    expr_type: expected_type.strip_modifiers(),
                                     expression: ExpressionType::Value {
                                         value: Value::Number(num_or_ident.to_string()),
                                     },
@@ -810,10 +803,7 @@ impl Parser {
                         };
                     } else {
                         return Expression {
-                            expr_type: TypeDescription {
-                                modifier: ModifierType::None,
-                                _type: expected_type._type,
-                            },
+                            expr_type: expected_type.strip_modifiers(),
                             expression: ExpressionType::Value {
                                 value: Value::Number(num_or_ident.to_string()),
                             },
@@ -947,10 +937,7 @@ impl Parser {
             match &token.token_type {
                 OpenCurlyBracket => {
                     let varibale_type = variable_to_be_assign_type;
-                    if let TypeDescription {
-                        modifier: ModifierType::None,
-                        _type: TypeDef::Func(func_def),
-                    } = varibale_type
+                    if let TypeDescription::Func(func_def) = varibale_type
                     {
                         state.parse_scope(tokens, *func_def.returns)
                     } else {
@@ -975,10 +962,7 @@ impl Parser {
                         True => {
                             tokens.next();
                             if variable_to_be_assign_type
-                                == (TypeDescription {
-                                    modifier: ModifierType::None,
-                                    _type: TypeDef::Boolean,
-                                })
+                                == (TypeDescription::Boolean)
                             {
                                 Expression {
                                     expr_type: TypeDescription::bool(),
@@ -998,10 +982,7 @@ impl Parser {
                         False => {
                             tokens.next();
                             if variable_to_be_assign_type
-                                == (TypeDescription {
-                                    modifier: ModifierType::None,
-                                    _type: TypeDef::Boolean,
-                                })
+                                == (TypeDescription::Boolean)
                             {
                                 Expression {
                                     expr_type: TypeDescription::bool(),
@@ -1053,9 +1034,9 @@ impl Parser {
         tokens: &mut TokenIter,
         array_type: TypeDescription,
     ) -> Expression {
-        match array_type.modifier {
-            ModifierType::DynamicArray => todo!(),
-            ModifierType::FixedArray(size) => {
+        match array_type.get_modifier() {
+            TypeModifier::DynamicArray => todo!(),
+            TypeModifier::FixedArray(size) => {
                 let mut token;
                 let mut elem_index = 0;
                 let mut elements = Vec::new();

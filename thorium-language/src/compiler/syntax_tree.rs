@@ -19,49 +19,49 @@ impl FunctionDef {
     }
 }
 #[derive(Clone, Debug, PartialEq)]
-pub enum ModifierType {
+pub enum TypeModifier {
     FixedArray(usize),
     DynamicArray,
     None,
 }
-#[derive(Clone, Debug, PartialEq)]
-pub struct  TypeDescription {
-    pub modifier: ModifierType,
-    pub _type: TypeDef,
-}
+// #[derive(Clone, Debug, PartialEq)]
+// pub struct  TypeDescription {
+//     pub modifier: TypeModifier,
+//     pub _type: TypeDef,
+// }
 
-impl TypeDescription {
-    pub fn default_int() -> Self {
-        TypeDescription {
-            modifier: ModifierType::None,
-            _type: TypeDef::default_int(),
-        }
-    }
-    pub fn bool() -> Self {
-        TypeDescription {
-            modifier: ModifierType::None,
-            _type: TypeDef::Boolean,
-        }
-    }
-    pub fn strip_modifiers(&self) -> Self {
-        TypeDescription {
-            modifier: ModifierType::None,
-            _type: self._type.clone(),
-        }
-    }
-    pub fn undefined_number() -> Self {
-        TypeDescription {
-            modifier: ModifierType::None,
-            _type: TypeDef::undefined_number(),
-        }
-    }
-    pub fn void() -> Self {
-        TypeDescription {
-            modifier: ModifierType::None,
-            _type: TypeDef::Void
-        }
-    }
-}
+// impl TypeDescription {
+//     pub fn default_int() -> Self {
+//         TypeDescription {
+//             modifier: TypeModifier::None,
+//             _type: TypeDef::default_int(),
+//         }
+//     }
+//     pub fn bool() -> Self {
+//         TypeDescription {
+//             modifier: TypeModifier::None,
+//             _type: TypeDef::Boolean,
+//         }
+//     }
+//     pub fn strip_modifiers(&self) -> Self {
+//         TypeDescription {
+//             modifier: TypeModifier::None,
+//             _type: self._type.clone(),
+//         }
+//     }
+//     pub fn undefined_number() -> Self {
+//         TypeDescription {
+//             modifier: TypeModifier::None,
+//             _type: TypeDef::undefined_number(),
+//         }
+//     }
+//     pub fn void() -> Self {
+//         TypeDescription {
+//             modifier: TypeModifier::None,
+//             _type: TypeDef::Void
+//         }
+//     }
+// }
 
 #[derive(Debug, Clone)]
 
@@ -74,14 +74,18 @@ pub struct Variable {
 
 
 #[derive(Clone, Debug, PartialEq)]
-pub  enum TypeDef {
+pub  enum TypeDescription {
     Number(NumberDef),
     Boolean,
     Func(FunctionDef),
     Void,
+    ModifiedType {
+        modifier: TypeModifier,
+        _type: Box<TypeDescription>
+    }
 }
 
-impl TypeDef {
+impl TypeDescription {
     pub fn new() -> Self {
         Self::Boolean
     }
@@ -89,27 +93,49 @@ impl TypeDef {
         Self::Void
     }
     pub fn from_int(int: IntegerDef) -> Self {
-        TypeDef::Number(NumberDef::Integer(int))
+        TypeDescription::Number(NumberDef::Integer(int))
     }
     pub fn undefined_number() -> Self {
-        TypeDef::Number(NumberDef::Undefined)
+        TypeDescription::Number(NumberDef::Undefined)
     }
 
     pub fn default_int() -> Self {
-        TypeDef::Number(NumberDef::Integer(IntegerDef::I64))
+        TypeDescription::Number(NumberDef::Integer(IntegerDef::I64))
+    }
+    pub fn strip_modifiers(&self) -> Self {
+        match self {
+            TypeDescription::Number(_number_def) => self.clone(),
+            TypeDescription::Boolean => self.clone(),
+            TypeDescription::Func(_function_def) => self.clone(),
+            TypeDescription::Void => self.clone(),
+            TypeDescription::ModifiedType { modifier: _, _type } => _type.strip_modifiers(),
+        }
     }
     pub fn to_string(&self) -> String {
         match self {
-            TypeDef::Number(number_def) => number_def.to_string(),
-            TypeDef::Boolean => "i8".to_string(),
-            TypeDef::Func(_) => todo!(),
-            TypeDef::Void => todo!()
+            TypeDescription::Number(number_def) => number_def.to_string(),
+            TypeDescription::Boolean => "i8".to_string(),
+            TypeDescription::Func(_) => todo!(),
+            TypeDescription::Void => todo!(),
+            TypeDescription::ModifiedType { modifier: _, _type } => todo!()
         }
     }
     pub fn is_number(&self) -> bool {
         match self {
-            TypeDef::Number(_) => true,
+            TypeDescription::Number(_) => true,
             _ => false,
+        }
+    }
+    pub fn bool() -> Self {
+        TypeDescription::Boolean
+    }
+    pub fn get_modifier(&self) -> TypeModifier {
+        match self {
+            TypeDescription::Number(_number_def) => TypeModifier::None,
+            TypeDescription::Boolean => TypeModifier::None,
+            TypeDescription::Func(_function_def) => TypeModifier::None,
+            TypeDescription::Void => TypeModifier::None,
+            TypeDescription::ModifiedType { modifier, _type } => modifier.clone(),
         }
     }
 }
