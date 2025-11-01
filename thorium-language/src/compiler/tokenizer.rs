@@ -63,7 +63,7 @@ impl Token {
 
 pub struct TokenIter {
     tokens: Vec<Token>,
-    index: i32,
+    pub index: i32,
     just_initialized: bool,
 }
 

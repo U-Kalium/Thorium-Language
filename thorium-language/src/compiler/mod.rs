@@ -4,6 +4,7 @@ mod parser;
 mod tokenizer;
 mod syntax_tree;
 mod code_gen;
+mod expression_tree;
 
 pub fn compile(content: &str) -> String {
     let tokens = tokanize(content.to_string());
