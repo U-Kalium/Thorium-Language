@@ -1,3 +1,4 @@
+#![allow(warnings)]
 use std::env::{self, Args };
 use std::fs;
 mod vm;

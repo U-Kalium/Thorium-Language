@@ -58,7 +58,7 @@ let j char = 'j'                    // utf 8 character denoted by single qoutes
     accessing it would have [] on the right e.g. numbers[2]
 */
 let k [dyn]int                      // dynamic array denoted by [dyn]
-let l [10]int                       // fixed size arrat denoted by [int]
+let l [10]int                       // fixed size arrat denoted by [type]
 
 // Type declerations
 
@@ -66,20 +66,11 @@ type number i32             // the ident after `type` can now be used anywhere a
 
 // Structs
 
-let john struct {           // this would be declaring a variable with an anonymouse struct type. 
+let john {           // this would be declaring a variable with an anonymouse struct type. 
     age int
     height f32
     name string
 }
-
-type Person struct {        // Here we alias the struct as Person
-    age int
-    height f32
-    name string
-}
-
-let Joe Person              // this is almost the same as john but the types would not be the same
-
 let mike {                  // this will be infered to Person although if another struct has the same members type parameter will be needed
     age     = 10
     height  = 1.7
@@ -88,17 +79,13 @@ let mike {                  // this will be infered to Person although if anothe
 
 // default values
 
-let john struct {           // this is how you would most likely assign values to an anonymouse struct
+let john {           // this is how you would most likely assign values to an anonymouse struct
     age = 10
     height f32 = 1.9
     name = "john"
 }
 
-type Person struct {
-    age int = 0
-    height = 0.1
-    name
-}
+
 
 // Methods, Generics and Interfaces
 
