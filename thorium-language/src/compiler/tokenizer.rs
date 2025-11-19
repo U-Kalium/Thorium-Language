@@ -11,21 +11,21 @@ pub enum TokenType {
     I8,
     F64,
     F32,
-    #[symbol("(")]
+    #[symbol("(")] 
     OpenBracket,
-    #[symbol(")")]
+    #[symbol(")")] 
     CloseBracket,
-    #[symbol("{")]
+    #[symbol("{")] 
     OpenCurlyBracket,
-    #[symbol("{")]
+    #[symbol("}")] 
     CloseCurlyBracket,
-    #[symbol("<")]
+    #[symbol("<")] 
     OpenAngleBracket,
-    #[symbol(">")]
+    #[symbol(">")] 
     CloseAngleBracket,
-    #[symbol("[")]
+    #[symbol("[")] 
     OpenSquareBracket,
-    #[symbol("]")]
+    #[symbol("]")] 
     CloseSquareBracket,
     Return,
     Finish,
@@ -74,7 +74,7 @@ pub struct Token {
 #[derive(Error, Debug)]
 pub enum TokenError {
     #[error("found EOF token")]
-    ReachedEOF,
+    ReachedEOF
 }
 
 pub struct TokenIter {
@@ -98,11 +98,10 @@ impl TokenIter {
                 if let Token {
                     token_type: TokenType::Eof,
                     file_offset,
-                } = token
-                {
+                } = token {
                     return Err(TokenError::ReachedEOF.into());
                 } else {
-                    return Ok(token.clone());
+                    return Ok(token.clone())
                 }
             } else {
                 panic!("Somhow reached end of tokens without reaching EOF token")
@@ -113,11 +112,10 @@ impl TokenIter {
                 if let Token {
                     token_type: TokenType::Eof,
                     file_offset,
-                } = token
-                {
+                } = token {
                     return Err(TokenError::ReachedEOF.into());
                 } else {
-                    return Ok(token.clone());
+                    return Ok(token.clone())
                 }
             } else {
                 panic!("Somhow reached end of tokens without reaching EOF token")
@@ -145,11 +143,10 @@ impl TokenIter {
                 if let Token {
                     token_type: TokenType::Eof,
                     file_offset,
-                } = token
-                {
+                } = token {
                     return Err(TokenError::ReachedEOF.into());
                 } else {
-                    return Ok(token.clone());
+                    return Ok(token.clone())
                 }
             } else {
                 panic!("Somhow reached end of tokens without reaching EOF token")
@@ -159,11 +156,10 @@ impl TokenIter {
                 if let Token {
                     token_type: TokenType::Eof,
                     file_offset,
-                } = token
-                {
+                } = token {
                     return Err(TokenError::ReachedEOF.into());
                 } else {
-                    return Ok(token.clone());
+                    return Ok(token.clone())
                 }
             } else {
                 panic!("Somhow reached end of tokens without reaching EOF token")
@@ -172,19 +168,18 @@ impl TokenIter {
     }
     pub fn back(&mut self) -> Result<Token, CompilerError> {
         self.index -= 1;
-        if let Some(token) = self.tokens.get(self.index as usize) {
-            if let Token {
-                token_type: TokenType::Eof,
-                file_offset,
-            } = token
-            {
-                return Err(TokenError::ReachedEOF.into());
+            if let Some(token) = self.tokens.get(self.index as usize) {
+                if let Token {
+                    token_type: TokenType::Eof,
+                    file_offset,
+                } = token {
+                    return Err(TokenError::ReachedEOF.into());
+                } else {
+                    return Ok(token.clone())
+                }
             } else {
-                return Ok(token.clone());
+                panic!("Somhow reached end of tokens without reaching EOF token")
             }
-        } else {
-            panic!("Somhow reached end of tokens without reaching EOF token")
-        }
     }
 }
 

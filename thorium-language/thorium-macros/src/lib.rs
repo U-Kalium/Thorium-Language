@@ -79,7 +79,8 @@ enum TokenBehaviour {
 }
 #[derive(Debug)]
 struct TokensInfo {
-    symbolised: Vec<(Ident, TokenTree2)>,
+    symbol_len_1: Vec<(Ident, TokenTree2)>,
+    symbol_len_2: Vec<(Ident, TokenTree2)>,
     plain: Vec<(Ident, TokenTree2)>,
 }
 
@@ -92,7 +93,8 @@ pub fn derive_tokenize(item: TokenStream) -> TokenStream {
         syn::Data::Enum(data) => data,
         _ => panic!("Failed to parse HelperAttr, didn't parse enum"),
     };
-    let mut symbolised = Vec::new();
+    let mut symbol_len_1 = Vec::new();
+    let mut symbol_len_2 = Vec::new();
     let mut plain = Vec::new();
     for variant in enum_.variants.iter() {
         if variant.attrs.iter().len() > 1 {
@@ -104,11 +106,23 @@ pub fn derive_tokenize(item: TokenStream) -> TokenStream {
                 panic!("Expected path to be symbol")
             }
 
-            let char_lit: LitStr = attr.parse_args().unwrap();
-            symbolised.push((
-                variant.ident.clone(),
-                TokenTree2::Literal(Literal::string(&char_lit.value().to_string())),
-            ));
+            let string_lit: LitStr = attr.parse_args().unwrap();
+            let string_lit_value = &string_lit.value();
+            match string_lit_value.len() {
+                1 => {
+                    symbol_len_1.push((
+                        variant.ident.clone(),
+                        TokenTree2::Literal(Literal::string(string_lit_value)),
+                    ));
+                }
+                2 => {
+                    symbol_len_2.push((
+                        variant.ident.clone(),
+                        TokenTree2::Literal(Literal::string(string_lit_value)),
+                    ));
+                }
+                _ => panic!("Tried parsing a symbol greater than two"),
+            }
         } else {
             match variant.ident.to_string().as_str() {
                 "Ident" => {}
@@ -124,114 +138,144 @@ pub fn derive_tokenize(item: TokenStream) -> TokenStream {
             }
         }
     }
-    let tokens_info = TokensInfo { symbolised, plain };
+    let tokens_info = TokensInfo {
+        symbol_len_1,
+        symbol_len_2,
+        plain,
+    };
     create_tokenize_fn(tokens_info)
 }
 
 fn create_tokenize_fn(info: TokensInfo) -> TokenStream {
     let (plains_variant, plains_str_lit): (Vec<Ident>, Vec<TokenTree2>) =
         info.plain.clone().into_iter().unzip();
-    let (symbol_variant, symbol_str_lit): (Vec<Ident>, Vec<TokenTree2>) =
-        info.symbolised.clone().into_iter().unzip();
+    let (symbol_variant_1, symbol_str_lit_1): (Vec<Ident>, Vec<TokenTree2>) =
+        info.symbol_len_1.clone().into_iter().unzip();
+    let (symbol_variant_2, symbol_str_lit_2): (Vec<Ident>, Vec<TokenTree2>) =
+        info.symbol_len_2.clone().into_iter().unzip();
     quote! {
-        pub fn tokenize(content: String) -> Vec<Token> {
-            let mut tokens = Vec::new();
-            let mut content_chars = content.chars().peekable();
-            let mut file_offset = 0;
+            pub fn tokenize(content: String) -> Vec<Token> {
+                let mut tokens = Vec::new();
+                let mut content_chars = content.chars().peekable();
+                let mut file_offset = 0;
 
-            while content_chars.peek().is_some() {
-                let peeked = content_chars.peek().unwrap();
-                let mut buffer = String::new();
-                if peeked.is_whitespace() && peeked != &'\n' {
-                    content_chars.next();
-                    file_offset += 1;
-                } else if peeked.is_alphabetic() {
-                    while content_chars
-                        .peek()
-                        .is_some_and(|char| char.is_alphanumeric() || *char == '_')
-                    {
-                        buffer.push(content_chars.next().unwrap());
-                        file_offset += 1
-                    }
-                    match buffer.as_str() {
-                        #(#plains_str_lit => {
-                            tokens.push(Token {
-                                token_type: TokenType::#plains_variant,
-                                file_offset: file_offset
-                            });
-                        }),*
-                        otherwise => {
-                            tokens.push(Token {
-                                token_type: TokenType::Ident(buffer.clone()),
-                                file_offset: file_offset
-                            });
+                while content_chars.peek().is_some() {
+                    let peeked = content_chars.peek().unwrap();
+                    let mut buffer = String::new();
+                    if peeked.is_whitespace() && peeked != &'\n' {
+                        content_chars.next();
+                        file_offset += 1;
+                    } else if peeked.is_alphabetic() {
+                        while content_chars
+                            .peek()
+                            .is_some_and(|char| char.is_alphanumeric() || *char == '_')
+                        {
+                            buffer.push(content_chars.next().unwrap());
+                            file_offset += 1
                         }
-                    }
-                } else if !peeked.is_alphanumeric() {
-                    while content_chars
-                        .peek()
-                        .is_some_and(|char| char.is_ascii_punctuation())
-                    {
-                        buffer.push(content_chars.next().unwrap());
-                        file_offset += 1
-                    }
-                    match buffer.as_str() {
-                        #(#symbol_str_lit => {
-                            tokens.push(Token {
-                                token_type: TokenType::#symbol_variant,
-                                file_offset: file_offset
-                            });
-                        }),*
-                        otherwise => panic!("unknown symbols: {}", otherwise)
-                    }
-                } else if peeked.is_ascii_digit() {
-                    while  content_chars
-                        .peek()
-                        .is_some_and(|char| char.is_ascii_digit())
-                    {
-                        buffer.push(content_chars.next().unwrap());
-                        file_offset += 1
-                    }
-                    if *content_chars.peek().unwrap() == '.' {
+                        match buffer.as_str() {
+                            #(#plains_str_lit => {
+                                tokens.push(Token {
+                                    token_type: TokenType::#plains_variant,
+                                    file_offset: file_offset
+                                });
+                            }),*
+                            otherwise => {
+                                tokens.push(Token {
+                                    token_type: TokenType::Ident(buffer.clone()),
+                                    file_offset: file_offset
+                                });
+                            }
+                        }
+                    } else if *peeked == '\n' {
+                        content_chars.next();
+                        tokens.push(Token {
+                            token_type: TokenType::NewLine,
+                            file_offset: file_offset
+                        });
+                    } else if !peeked.is_alphanumeric() {
                         buffer.push(content_chars.next().unwrap());
                         file_offset += 1;
-                        while content_chars
+                        if content_chars.peek().unwrap().is_ascii_punctuation() {
+                            buffer.push(content_chars.peek().unwrap().clone());
+                            file_offset += 1;
+                            match buffer.as_str() {
+                                #(#symbol_str_lit_2 => {
+                                    content_chars.next();
+                                    tokens.push(Token {
+                                        token_type: TokenType::#symbol_variant_2,
+                                        file_offset: file_offset
+                                    });
+                                }),*
+                                otherwise => {
+                                    buffer.pop().unwrap();
+                                    file_offset -= 1;
+                                    match buffer.as_str() {
+                                        #(#symbol_str_lit_1 => {
+                                            tokens.push(Token {
+                                                token_type: TokenType::#symbol_variant_1,
+                                                file_offset: file_offset
+                                            });
+                                        }),*
+                                        otherwise => panic!("unknown symbols: '{}'", otherwise)
+                                    }
+                                }
+                            }
+                        } else {
+                            match buffer.as_str() {
+                                #(#symbol_str_lit_1 => {
+                                    tokens.push(Token {
+                                        token_type: TokenType::#symbol_variant_1,
+                                        file_offset: file_offset
+                                    });
+                                }),*
+                                otherwise => panic!("unknown symbols: '{}'", otherwise)
+                            }
+                        }
+                        
+                        
+                    } else if peeked.is_ascii_digit() {
+                        while  content_chars
                             .peek()
                             .is_some_and(|char| char.is_ascii_digit())
                         {
                             buffer.push(content_chars.next().unwrap());
                             file_offset += 1
-                        };
-                        tokens.push(Token {
-                            token_type: TokenType::NumberLit(buffer.clone()),
-                            file_offset: file_offset
-                        });
-                    } else {
-                        tokens.push(Token {
-                            token_type: TokenType::NumberLit(buffer.clone()),
-                            file_offset: file_offset
-                        });
-                    }
-                } else if *peeked == '\n' {
-                    content_chars.next();
-                    tokens.push(Token {
-                        token_type: TokenType::NewLine,
-                        file_offset: file_offset
-                    });
-                };
-buffer.clear();
+                        }
+                        if *content_chars.peek().unwrap() == '.' {
+                            buffer.push(content_chars.next().unwrap());
+                            file_offset += 1;
+                            while content_chars
+                                .peek()
+                                .is_some_and(|char| char.is_ascii_digit())
+                            {
+                                buffer.push(content_chars.next().unwrap());
+                                file_offset += 1
+                            };
+                            tokens.push(Token {
+                                token_type: TokenType::NumberLit(buffer.clone()),
+                                file_offset: file_offset
+                            });
+                        } else {
+                            tokens.push(Token {
+                                token_type: TokenType::NumberLit(buffer.clone()),
+                                file_offset: file_offset
+                            });
+                        }
+                    };
+    buffer.clear();
+                }
+
+
+
+            tokens.push(Token {
+                token_type: TokenType::Eof,
+                file_offset: file_offset
+            });
+
+            tokens
             }
-            
-
-            
-        tokens.push(Token {
-            token_type: TokenType::Eof,
-            file_offset: file_offset
-        });
-
-        tokens
         }
-    }
     .into()
 }
 
