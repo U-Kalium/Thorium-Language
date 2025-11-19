@@ -7,3 +7,4 @@ edition = "2024"
 thorium-macros = { path = "thorium-macros" }
 hashbrown = "0.15.5"
 dynasmrt = "=3.2.1"
+thiserror = "2.0.17"
