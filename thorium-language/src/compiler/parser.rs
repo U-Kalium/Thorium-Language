@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use hashbrown::HashMap;
 use thiserror::Error;
 
 use crate::compiler::CompilerError;
@@ -56,12 +57,12 @@ fn parse_number_lit(
             if lit.contains(".") {
                 Ok(Expr {
                     kind: ExprKind::Value(Value::Float(lit.parse().unwrap())),
-                    expr_type: Type::Unknown(next_unkown_type()),
+                    expr_type: Type::UnknownFloat(next_unkown_type()),
                 })
             } else {
                 Ok(Expr {
                     kind: ExprKind::Value(Value::Integer(lit.parse().unwrap())),
-                    expr_type: Type::Unknown(next_unkown_type())
+                    expr_type: Type::UnknownNumber(next_unkown_type()),
                 })
             }
         }
@@ -319,6 +320,244 @@ fn parse_declaration(
     })
 }
 
+fn gen_type_equations(expr: &Expr, type_equations: &mut HashMap<Type, Type>) {
+    let current_expr_type = expr.expr_type.clone();
+    match &expr.kind {
+        ExprKind::VarDeclaration {
+            ident,
+            var_type,
+            assignment,
+        } => {
+            type_equations.insert(current_expr_type, Type::Void);
+            if let Some(assignment_expr) = assignment {
+                type_equations.insert(assignment_expr.expr_type.clone(), var_type.clone());
+                gen_type_equations(&assignment_expr, type_equations);
+            }
+        }
+        ExprKind::Return { expr } => {
+            type_equations.insert(current_expr_type, Type::Void);
+            gen_type_equations(expr, type_equations);
+        }
+        ExprKind::Finish { expr } => {
+            type_equations.insert(current_expr_type, Type::Void);
+            gen_type_equations(expr, type_equations);
+        }
+        ExprKind::Value(value) => {}
+        ExprKind::Variable { ident, var_type } => {
+            type_equations.insert(current_expr_type, var_type.clone());
+        }
+        ExprKind::Block { scope_info, exprs } => {
+            for block_expr in exprs {
+                gen_type_equations(block_expr, type_equations);
+                match &block_expr.kind {
+                    ExprKind::Finish { expr } => {
+                        type_equations.insert(expr.expr_type.clone(), {
+                            match type_equations.get(&current_expr_type) {
+                                Some(Type::Func { params: _, returns }) => *returns[0].clone(),
+                                Some(otherwise) => otherwise.clone(),
+                                None => current_expr_type.clone(),
+                            }
+                        });
+                    }
+                    ExprKind::Return { expr } => {
+                        type_equations.insert(expr.expr_type.clone(), {
+                            match type_equations.get(&current_expr_type) {
+                                Some(Type::Func { params: _, returns }) => *returns[0].clone(),
+                                Some(otherwise) => otherwise.clone(),
+                                None => current_expr_type.clone(),
+                            }
+                        });
+                    }
+                    _ => (),
+                }
+            }
+        }
+        ExprKind::Empty => {},
+    }
+}
+// fn generate_equations(&self, equations: &mut HashMap<Type, Type>) {
+//         // dbg!(self);
+//         // let mut equations = HashMap::new();
+//         let first_type_ = &self.type_;
+//         match &self.expr {
+//             ExprType::Decleration {
+//                 is_mutable: _,
+//                 ident: _,
+//                 type_,
+//                 assignment,
+//             } => {
+//                 if let Some(assignment) = assignment {
+//                     equations.insert(assignment.0.type_.clone(), type_.clone());
+//                     assignment.0.generate_equations(equations);
+//                 }
+//                 equations.insert(first_type_.clone(), Type::Void);
+//             }
+//             ExprType::Finish { expr } => {
+//                 equations.insert(first_type_.clone(), Type::Void);
+//                 expr.0.generate_equations(equations);
+//             }
+//             ExprType::Value(value) => match value {
+//                 Value::Integer(_) => {
+//                     equations.insert(first_type_.clone(), Type::I64);
+//                 }
+//             },
+//             ExprType::Block {
+//                 scope_info: _,
+//                 exprs,
+//             } => {
+//                 for (block_expr, _) in exprs {
+//                     block_expr.generate_equations(equations);
+//                     match &block_expr.expr {
+//                         ExprType::Finish { expr } => {
+//                             equations.insert(expr.0.type_.clone(), {
+//                                 match equations.get(first_type_) {
+//                                     Some(Type::Func {
+//                                         param_names: _,
+//                                         params: _,
+//                                         returns,
+//                                     }) => returns[0].clone(),
+//                                     Some(otherwise) => otherwise.clone(),
+//                                     None => first_type_.clone(),
+//                                 }
+//                             });
+//                         }
+//                         ExprType::Return { expr } => {
+//                             equations.insert(expr.0.type_.clone(), {
+//                                 match equations.get(first_type_) {
+//                                     Some(Type::Func {
+//                                         param_names: _,
+//                                         params: _,
+//                                         returns,
+//                                     }) => returns[0].clone(),
+//                                     Some(otherwise) => otherwise.clone(),
+//                                     None => first_type_.clone(),
+//                                 }
+//                             });
+//                         }
+//                         _ => (),
+//                     }
+//                 }
+//             }
+//             ExprType::Return { expr } => {
+//                 equations.insert(first_type_.clone(), Type::Void);
+//                 expr.0.generate_equations(equations);
+//             }
+//             ExprType::Variable { ident: _, type_ } => {
+//                 equations.insert(first_type_.clone(), type_.clone());
+//             },
+//         }
+//         // equations
+//     }
+//     fn solve_unkown_types(&self, equations: &HashMap<Type, Type>) -> Self {
+//         fn get_new_type(type_: &Type, equations: &HashMap<Type, Type>) -> Type {
+//             match type_ {
+//                 Type::Unkown(id) => {
+//                     if let Some(new_type) = equations.get(&Type::Unkown(*id)) {
+//                         get_new_type(new_type, equations)
+//                     } else {
+//                         type_.clone()
+//                     }
+//                 }
+//                 _ => type_.clone(),
+//             }
+//         }
+//         let new_type = get_new_type(&self.type_, equations);
+//         let new_expr_type = match &self.expr {
+//             ExprType::Decleration {
+//                 is_mutable,
+//                 ident,
+//                 type_,
+//                 assignment,
+//             } => ExprType::Decleration {
+//                 is_mutable: *is_mutable,
+//                 ident: ident.clone(),
+//                 type_: type_.clone(),
+//                 assignment: if let Some(expr) = assignment {
+//                     Some(Box::new((expr.0.solve_unkown_types(equations), expr.1)))
+//                 } else {
+//                     None
+//                 },
+//             },
+//             ExprType::Finish { expr } => ExprType::Finish {
+//                 expr: Box::new((expr.0.solve_unkown_types(equations), expr.1)),
+//             },
+//             ExprType::Value(value) => ExprType::Value(value.clone()),
+//             ExprType::Block { scope_info, exprs } => ExprType::Block {
+//                 scope_info: scope_info.clone(),
+//                 exprs: exprs
+//                     .iter()
+//                     .map(|(expr, span)| (expr.solve_unkown_types(equations), span.clone()))
+//                     .collect(),
+//             },
+//             ExprType::Return { expr } => ExprType::Return {
+//                 expr: Box::new((expr.0.solve_unkown_types(equations), expr.1)),
+//             },
+//             ExprType::Variable { ident, type_ } => {
+//                 ExprType::Variable { ident: ident.clone(), type_: type_.clone() }
+//             },
+//         };
+//         Self {
+//             type_: new_type,
+//             expr: new_expr_type,
+//         }
+//     }
+//     fn solve_variable_scoping(&self, variables: &Variables) -> (Self, Variables) {
+//         let mut variables = variables.clone();
+//         // let mut scope_info_tracker = ScopeInfo::new();
+//         // let mut variables = Variables::new();
+//         let type_ = self.type_.clone();
+//         let new_expr_type = match &self.expr {
+//             ExprType::Decleration {
+//                 is_mutable,
+//                 ident,
+//                 type_,
+//                 assignment,
+//             } => {
+//                 let var_info = VariableInfo {
+//                     scope_id: unsafe { SCOPE_INFO_TRACKER.id },
+//                     is_mutable: *is_mutable,
+//                 };
+//                 variables.add_var(var_info, ident, type_.clone());
+//                 ExprType::Decleration {
+//                     is_mutable: *is_mutable,
+//                     ident: ident.clone(),
+//                     type_: type_.clone(),
+//                     assignment: assignment.clone(),
+//                 }
+//             }
+//             ExprType::Block { scope_info, exprs } => {
+//                 #[allow(static_mut_refs)]
+//                 unsafe {
+//                     SCOPE_INFO_TRACKER.into_scope()
+//                 };
+//                 #[allow(static_mut_refs)]
+//                 let scope_info = unsafe { SCOPE_INFO_TRACKER.clone() };
+//                 let exprs = exprs
+//                     .iter()
+//                     .map(|(expr, span)| {
+//                         let (new_expr, new_variables) = expr.solve_variable_scoping(&variables);
+
+//                         (new_expr, span.clone())
+//                     })
+//                     .collect();
+//                 #[allow(static_mut_refs)]
+//                 unsafe {
+//                     SCOPE_INFO_TRACKER.out_of_scope()
+//                 };
+//                 ExprType::Block { scope_info, exprs }
+//             }
+//             otherwise => otherwise.clone(),
+//         };
+
+//         // todo!()
+//         (
+//             Self {
+//                 type_,
+//                 expr: new_expr_type,
+//             },
+//             variables,
+//         )
+//     }
 #[test]
 fn scratch_pad() {
     let file = include_str!("../../../examples/return.th");
@@ -326,6 +565,9 @@ fn scratch_pad() {
     let mut token_iter = TokenIter::new(tokens);
     let mut parser_ctx = ParserCtx::new();
     let declaration = parse_declaration(&mut token_iter, &mut parser_ctx).unwrap();
+    let mut type_equations = HashMap::new();
+    gen_type_equations(&declaration, &mut type_equations);
     dbg!(declaration);
+    dbg!(type_equations);
     assert!(true)
 }

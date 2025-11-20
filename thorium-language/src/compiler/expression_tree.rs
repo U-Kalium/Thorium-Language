@@ -46,6 +46,8 @@ pub enum Type {
         returns: Arc<[Box<Type>]>,
     },
     Unknown(u32),
+    UnknownNumber(u32),
+    UnknownFloat(u32),
     I64,
     I32,
     I16,
