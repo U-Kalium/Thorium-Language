@@ -372,9 +372,67 @@ fn gen_type_equations(expr: &Expr, type_equations: &mut HashMap<Type, Type>) {
                 }
             }
         }
-        ExprKind::Empty => {},
+        ExprKind::Empty => {}
     }
 }
+
+fn solve_unkown_types(expr: &Expr, type_equations: &HashMap<Type, Type>) -> Expr {
+    fn get_new_type(original_type: &Type, type_equations: &HashMap<Type, Type>) -> Type {
+        match original_type {
+            Type::Unknown(id) | Type::UnknownNumber(id) | Type::UnknownFloat(id) => {
+                if let Some(new_type) = type_equations.get(original_type) {
+                    get_new_type(new_type, type_equations)
+                } else {
+                    original_type.clone()
+                }
+            }
+            _ => original_type.clone(),
+        }
+    }
+    let new_type = get_new_type(&expr.expr_type, type_equations);
+    let new_expr_kind = match &expr.kind {
+        ExprKind::VarDeclaration {
+            ident,
+            var_type,
+            assignment,
+        } => ExprKind::VarDeclaration {
+            ident: ident.clone(),
+            var_type: var_type.clone(),
+            assignment: if let Some(assignment_expr) = assignment {
+                Some(Box::new(solve_unkown_types(
+                    &assignment_expr,
+                    type_equations,
+                )))
+            } else {
+                None
+            },
+        },
+        ExprKind::Return { expr } => ExprKind::Return {
+            expr: Box::new(solve_unkown_types(&expr, type_equations)),
+        },
+        ExprKind::Finish { expr } => ExprKind::Finish {
+            expr: Box::new(solve_unkown_types(&expr, type_equations)),
+        },
+        ExprKind::Value(value) => ExprKind::Value(value.clone()),
+        ExprKind::Variable { ident, var_type } => ExprKind::Variable {
+            ident: ident.clone(),
+            var_type: var_type.clone(),
+        },
+        ExprKind::Block { scope_info, exprs } => ExprKind::Block {
+            scope_info: scope_info.clone(),
+            exprs: exprs
+                .iter()
+                .map(|expr| solve_unkown_types(&expr, type_equations))
+                .collect(),
+        },
+        ExprKind::Empty => ExprKind::Empty,
+    };
+    Expr {
+        expr_type: new_type,
+        kind: new_expr_kind,
+    }
+}
+
 // fn generate_equations(&self, equations: &mut HashMap<Type, Type>) {
 //         // dbg!(self);
 //         // let mut equations = HashMap::new();
@@ -564,9 +622,10 @@ fn scratch_pad() {
     let mut tokens = tokenize(file.to_string());
     let mut token_iter = TokenIter::new(tokens);
     let mut parser_ctx = ParserCtx::new();
-    let declaration = parse_declaration(&mut token_iter, &mut parser_ctx).unwrap();
+    let mut declaration = parse_declaration(&mut token_iter, &mut parser_ctx).unwrap();
     let mut type_equations = HashMap::new();
     gen_type_equations(&declaration, &mut type_equations);
+    declaration = solve_unkown_types(&declaration, &type_equations);
     dbg!(declaration);
     dbg!(type_equations);
     assert!(true)
