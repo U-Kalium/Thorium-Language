@@ -55,12 +55,8 @@ pub enum Type {
 }
 #[derive(Debug, Clone)]
 pub enum Value {
-    I64(i64),
-    I32(i32),
-    I16(i16),
-    I8(i8),
-    F64(f64),
-    F32(f32),
+    Integer(i128),
+    Float(f64),
 }
 #[derive(Debug, Clone)]
 pub struct Expr {
