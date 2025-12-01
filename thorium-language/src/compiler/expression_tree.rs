@@ -6,7 +6,6 @@ use crate::compiler::tokenizer::TokenIter;
 use crate::compiler::tokenizer::TokenType::*;
 use crate::compiler::tokenizer::tokenize;
 
-
 #[derive(Debug, Clone)]
 pub struct ScopeInfo {
     pub scope_level: u32,
@@ -55,6 +54,56 @@ pub enum Type {
     F64,
     F32,
 }
+
+impl Type {
+    pub fn is_compatible(&self, into_type: &Type) -> bool {
+        if *self == *into_type {
+            return true;
+        }
+        if matches!(self, Type::Unknown(_)) {
+
+            return true;
+        }
+        if matches!(into_type, Type::Unknown(_)) {
+
+            return true
+        }
+        match into_type {
+            Type::UnknownFloat(_) => return matches!(self, Type::F32 | Type::F64 | Type::UnknownFloat(_)),
+            Type::UnknownNumber(_) => {
+                return matches!(
+                    self,
+                    Type::F32
+                        | Type::F64
+                        | Type::I16
+                        | Type::I32
+                        | Type::I64
+                        | Type::I8
+                        | Type::UnknownFloat(_)
+                        | Type::UnknownNumber(_)
+                );
+            },
+            _ => return false
+        }
+        match self {
+            Type::UnknownFloat(_) => return matches!(into_type, Type::F32 | Type::F64 | Type::UnknownFloat(_)),
+            Type::UnknownNumber(_) => {
+                return matches!(
+                    into_type,
+                    Type::F32
+                        | Type::F64
+                        | Type::I16
+                        | Type::I32
+                        | Type::I64
+                        | Type::I8
+                        | Type::UnknownFloat(_)
+                        | Type::UnknownNumber(_)
+                );
+            },
+            _ => return false
+        }
+    }
+}
 #[derive(Debug, Clone)]
 pub enum Value {
     Integer(i128),
@@ -71,6 +120,10 @@ pub enum ExprKind {
         ident: Arc<str>,
         var_type: Type,
         assignment: Option<Box<Expr>>,
+    },
+    VarAssignment {
+        ident: Arc<str>,
+        expr: Box<Expr>,
     },
     Return {
         expr: Box<Expr>,
@@ -92,8 +145,8 @@ pub enum ExprKind {
 
 #[derive(Clone, Debug)]
 pub struct VariableInfo {
-   pub scope_id: u32,
-   pub is_mutable: bool,
+    pub scope_id: u32,
+    pub is_mutable: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -112,4 +165,3 @@ impl Variables {
         }
     }
 }
-

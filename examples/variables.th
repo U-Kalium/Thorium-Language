@@ -1,8 +1,6 @@
-
 let main() i64 {
-    var a i64; let b i64 {
-        return 69
-    }
-    a = 10
+    let b = 10
+    let b = 10.0
     finish b
 }
+
