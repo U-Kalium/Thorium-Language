@@ -1,3 +1,4 @@
+use std::iter;
 use std::sync::Arc;
 
 use hashbrown::HashMap;
@@ -52,13 +53,42 @@ impl VariableInfo {
 
 #[derive(Debug, Clone)]
 pub struct VariableCtx {
-    variable_infos: HashMap<Arc<str>, Vec<(Type, VariableInfo)>>,
+    var_parsing_assist: HashMap<Arc<str>, Vec<(Type, VariableInfo)>>,
+    vars: Vec<(Arc<str>, Type)>,
+}
+
+impl VariableCtx {
+    fn new() -> Self {
+        Self {
+            var_parsing_assist: HashMap::new(),
+            vars: Vec::new(),
+        }
+    }
+    fn get_first_var_id(&self, ident: Arc<str>, var_type: &Type) -> Option<usize> {
+        for (var_id, info) in self.vars.iter().enumerate().rev() {
+            if *info == (ident.clone(), var_type.clone()) {
+                return Some(var_id);
+            }
+        }
+        return None;
+    }
+    fn get_first_available_var_id(&self, ident: Arc<str>, var_type: &Type) -> Option<usize> {
+        for (var_id, info) in self.vars.iter().enumerate().rev() {
+            if info.0 == ident {
+                if var_type.is_compatible(&info.1) {
+                    return Some(var_id);
+                }
+            }
+        }
+        return None;
+    }
+    // fn get() -> Option<>
 }
 
 #[derive(Debug, Clone)]
 pub struct ParserCtx {
     pub current_scope_info: ScopeInfo,
-    pub variable_info: HashMap<Arc<str>, Vec<(Type, VariableInfo)>>,
+    pub variable_info: VariableCtx,
     pub type_equations: HashMap<Type, Type>,
 }
 
@@ -66,23 +96,35 @@ impl ParserCtx {
     fn new() -> Self {
         Self {
             current_scope_info: ScopeInfo::new(),
-            variable_info: HashMap::new(),
+            variable_info: VariableCtx::new(),
             type_equations: HashMap::new(),
         }
     }
-    fn add_variable(&mut self, ident: Arc<str>, var_type: Type, var_info: VariableInfo) {
-        if let Some(var_infos) = self.variable_info.get_mut(&ident) {
-            var_infos.push((var_type, var_info));
+    fn add_variable(&mut self, ident: Arc<str>, var_type: Type, var_info: VariableInfo) -> usize {
+        if let Some(var_infos) = self.variable_info.var_parsing_assist.get_mut(&ident) {
+            var_infos.push((var_type.clone(), var_info));
         } else {
-            let var_infos_and_types = vec![(var_type, var_info)];
-            self.variable_info.insert(ident, var_infos_and_types);
+            let var_infos_and_types = vec![(var_type.clone(), var_info)];
+            self.variable_info
+                .var_parsing_assist
+                .insert(ident.clone(), var_infos_and_types);
         }
+        self.variable_info.vars.push((ident, var_type));
+        self.variable_info.vars.len() - 1
     }
-    fn change_var_type(&mut self, ident: &Arc<str>, old_var_type: &Type, new_var_type: &Type) {
-        if let Some(var_info_and_types) = self.variable_info.get_mut(ident) {
+    fn change_var_type(&mut self, var_id: usize, new_var_type: &Type) {
+        let (mut ident, mut old_var_type);
+        if let Some(var_info) = self.variable_info.vars.get_mut(var_id) {
+            (ident, old_var_type) = var_info.clone();
+            var_info.1 = new_var_type.clone();
+        } else {
+            panic!("tried changing a var that does not exist")
+        }
+        if let Some(var_info_and_types) = self.variable_info.var_parsing_assist.get_mut(&ident) {
             for (var_type, _) in var_info_and_types.iter_mut().rev() {
-                if var_type == old_var_type {
+                if *var_type == old_var_type {
                     *var_type = new_var_type.clone();
+                    old_var_type = new_var_type.clone();
                     return;
                 }
             }
@@ -95,7 +137,7 @@ impl ParserCtx {
         what_var_type: &Type,
         scope_info: &ScopeInfo,
     ) -> bool {
-        if let Some(var_types_and_infos) = self.variable_info.get(ident) {
+        if let Some(var_types_and_infos) = self.variable_info.var_parsing_assist.get(ident) {
             for (var_type, var_info) in var_types_and_infos.iter().rev() {
                 if var_info
                     .scope_info
@@ -124,7 +166,7 @@ impl ParserCtx {
         if self.is_var_accesable(ident, what_var_type, scope_info) {
             return true;
         }
-        if let Some(var_types_and_infos) = self.variable_info.get(ident) {
+        if let Some(var_types_and_infos) = self.variable_info.var_parsing_assist.get(ident) {
             for (var_type, var_info) in var_types_and_infos.iter().rev() {
                 if var_info
                     .scope_info
@@ -153,7 +195,7 @@ impl ParserCtx {
         what_var_type: &Type,
         scope_info: &ScopeInfo,
     ) -> bool {
-        if let Some(var_types_and_infos) = self.variable_info.get(ident) {
+        if let Some(var_types_and_infos) = self.variable_info.var_parsing_assist.get(ident) {
             for (var_type, var_info) in var_types_and_infos.iter().rev() {
                 if var_info
                     .scope_info
@@ -475,8 +517,10 @@ fn parse_variable(
         Ident(ident) => Ok(Expr {
             expr_type: expr_type.clone(),
             kind: ExprKind::Variable {
-                ident: ident.clone().into(),
-                var_type: expr_type,
+                var: VarValue::Undetermined {
+                    ident: ident.into(),
+                    var_type: expr_type,
+                },
             },
         }),
         _ => {
@@ -535,7 +579,7 @@ fn parse_declaration(
         Some(var_type) => var_type,
         None => Type::Unknown(next_unkown_type() as u32),
     };
-    parser_ctx.add_variable(
+    let var_id = parser_ctx.add_variable(
         ident.clone(),
         var_type.clone(),
         VariableInfo::new(parser_ctx.current_scope_info.clone(), is_mutable),
@@ -553,31 +597,28 @@ fn parse_declaration(
     // dbg!(tokens.current());
     Ok(Expr {
         expr_type: Type::Void,
-        kind: ExprKind::VarDeclaration {
-            ident,
-            var_type,
-            assignment,
-        },
+        kind: ExprKind::VarDeclaration { var_id, assignment },
     })
 }
 
 fn gen_type_equations(parser_ctx: &mut ParserCtx, expr: &Expr) {
     let current_expr_type = expr.expr_type.clone();
     match &expr.kind {
-        ExprKind::VarDeclaration {
-            ident,
-            var_type,
-            assignment,
-        } => {
+        ExprKind::VarDeclaration { var_id, assignment } => {
+            let (ident, var_type) = &parser_ctx.variable_info.vars[*var_id];
             parser_ctx
                 .type_equations
                 .insert(current_expr_type, Type::Void);
             if let Some(assignment_expr) = assignment {
                 match var_type {
-                    Type::Unknown(_) => parser_ctx.type_equations.insert(var_type.clone(),assignment_expr.expr_type.clone()),
-                    _ => parser_ctx.type_equations.insert( assignment_expr.expr_type.clone(), var_type.clone()),
+                    Type::Unknown(_) => parser_ctx
+                        .type_equations
+                        .insert(var_type.clone(), assignment_expr.expr_type.clone()),
+                    _ => parser_ctx
+                        .type_equations
+                        .insert(assignment_expr.expr_type.clone(), var_type.clone()),
                 };
-                
+
                 // parser_ctx
                 //     .type_equations
                 //     .insert(var_type.clone(), assignment_expr.expr_type.clone());
@@ -597,13 +638,19 @@ fn gen_type_equations(parser_ctx: &mut ParserCtx, expr: &Expr) {
             gen_type_equations(parser_ctx, expr);
         }
         ExprKind::Value(value) => {}
-        ExprKind::Variable { ident, var_type } => {
-            
-
-            parser_ctx
-                .type_equations
-                .insert(current_expr_type, var_type.clone());
-        }
+        ExprKind::Variable { var } => match var {
+            VarValue::Known(var_id) => {
+                let (_, var_type) = &parser_ctx.variable_info.vars[*var_id];
+                parser_ctx
+                    .type_equations
+                    .insert(current_expr_type, var_type.clone());
+            }
+            VarValue::Undetermined { ident, var_type } => {
+                parser_ctx
+                    .type_equations
+                    .insert(current_expr_type, var_type.clone());
+            }
+        },
         ExprKind::Block { scope_info, exprs } => {
             for block_expr in exprs {
                 gen_type_equations(parser_ctx, block_expr);
@@ -616,7 +663,6 @@ fn gen_type_equations(parser_ctx: &mut ParserCtx, expr: &Expr) {
                                 None => current_expr_type.clone(),
                             }
                         });
-
                     }
                     ExprKind::Return { expr } => {
                         parser_ctx.type_equations.insert(expr.expr_type.clone(), {
@@ -655,16 +701,12 @@ fn get_new_type(original_type: &Type, type_equations: &HashMap<Type, Type>) -> T
 fn check_solve_expr(expr: &Expr, parser_ctx: &mut ParserCtx) -> Result<Expr, CompilerError> {
     let new_type = get_new_type(&expr.expr_type, &parser_ctx.type_equations);
     let new_expr_kind = match &expr.kind {
-        ExprKind::VarDeclaration {
-            ident,
-            var_type,
-            assignment,
-        } => {
+        ExprKind::VarDeclaration { var_id, assignment } => {
+            let (ident, var_type) = &parser_ctx.variable_info.vars[*var_id];
             let solved_var_type = get_new_type(var_type, &parser_ctx.type_equations);
-            parser_ctx.change_var_type(ident, &var_type, &solved_var_type);
+            parser_ctx.change_var_type(*var_id, &solved_var_type);
             ExprKind::VarDeclaration {
-                ident: ident.clone(),
-                var_type: solved_var_type.clone(),
+                var_id: *var_id,
                 assignment: if let Some(assignment_expr) = assignment {
                     Some(Box::new(check_solve_expr(&assignment_expr, parser_ctx)?))
                 } else {
@@ -679,17 +721,26 @@ fn check_solve_expr(expr: &Expr, parser_ctx: &mut ParserCtx) -> Result<Expr, Com
             expr: Box::new(check_solve_expr(&expr, parser_ctx)?),
         },
         ExprKind::Value(value) => ExprKind::Value(value.clone()),
-        ExprKind::Variable { ident, var_type } => {
+        ExprKind::Variable { var } => {
+            let (mut ident, mut var_type);
+            match var {
+                VarValue::Known(var_index) => {
+                    (ident, var_type) = parser_ctx.variable_info.vars[*var_index].clone();
+                }
+                VarValue::Undetermined { ident: new_ident, var_type: new_var_type } => {
+                    (ident, var_type) = (new_ident.clone(), new_var_type.clone())
+                },
+            }
             let solved_var_type = get_new_type(&var_type, &parser_ctx.type_equations);
             println!("solved variable type is: {:?}", solved_var_type);
-            if let Some(variable_infos) = parser_ctx.variable_info.get(ident) {
+            if let Some(variable_infos) = parser_ctx.variable_info.var_parsing_assist.get(&ident) {
                 for (decl_var_type, var_info) in variable_infos.iter().rev() {
                     let final_decl_var_type;
                     if matches!(decl_var_type, Type::Unknown(_)) {
-                        final_decl_var_type  = get_new_type(decl_var_type, &parser_ctx.type_equations); 
+                        final_decl_var_type =
+                            get_new_type(decl_var_type, &parser_ctx.type_equations);
                     } else {
                         final_decl_var_type = decl_var_type.clone();
-
                     }
 
                     if solved_var_type.is_compatible(&final_decl_var_type) {
@@ -700,9 +751,9 @@ fn check_solve_expr(expr: &Expr, parser_ctx: &mut ParserCtx) -> Result<Expr, Com
                     }
                 }
             }
-            // dbg!(&solved_var_type);
+            // dbg!(&var_type);
             if !parser_ctx.is_var_accesable_or_available(
-                ident,
+                &ident,
                 &solved_var_type,
                 &parser_ctx.current_scope_info,
             ) {
@@ -711,9 +762,15 @@ fn check_solve_expr(expr: &Expr, parser_ctx: &mut ParserCtx) -> Result<Expr, Com
                     var_type: solved_var_type.clone(),
                 })?;
             }
+            println!("vars: {:?}", &parser_ctx.variable_info.vars);
+            // println!("parsing assist vars: {:?}", &parser_ctx.variable_info.var_parsing_assist);
             ExprKind::Variable {
-                ident: ident.clone(),
-                var_type: solved_var_type.clone(),
+                var: VarValue::Known(
+                    parser_ctx
+                        .variable_info
+                        .get_first_available_var_id(ident, &solved_var_type)
+                        .unwrap(),
+                ),
             }
         }
         ExprKind::Block { scope_info, exprs } => {

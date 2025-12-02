@@ -109,6 +109,15 @@ pub enum Value {
     Integer(i128),
     Float(f64),
 }
+
+#[derive(Debug, Clone)]
+pub enum VarValue {
+    Known(usize),
+    Undetermined {
+        ident: Arc<str>,
+        var_type: Type
+    },
+}
 #[derive(Debug, Clone)]
 pub struct Expr {
     pub(crate) expr_type: Type,
@@ -117,8 +126,7 @@ pub struct Expr {
 #[derive(Debug, Clone)]
 pub enum ExprKind {
     VarDeclaration {
-        ident: Arc<str>,
-        var_type: Type,
+        var_id: usize,
         assignment: Option<Box<Expr>>,
     },
     VarAssignment {
@@ -133,8 +141,7 @@ pub enum ExprKind {
     },
     Value(Value),
     Variable {
-        ident: Arc<str>,
-        var_type: Type,
+        var: VarValue
     },
     Block {
         scope_info: ScopeInfo,
