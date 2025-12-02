@@ -1,4 +1,8 @@
 let main() i64 {
+    let a {
+        
+    }
+
     let b = 10
     let b = 10.0
     finish b

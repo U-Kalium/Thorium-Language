@@ -32,7 +32,7 @@ pub enum ParserError {
         token: Token,
     },
     #[error("expected statement end (newline or semicolon), found {token:?}")]
-    ExpecetedStatementEnd { token: Token },
+    ExpectedStatementEnd { token: Token },
     #[error("could not find variable {ident} of type {var_type:?}")]
     VariableNotFound { ident: Arc<str>, var_type: Type },
 }
@@ -280,6 +280,7 @@ fn parse_void_expr(
         Var => parse_declaration(tokens, parser_ctx),
         OpenCurlyBracket => parse_block(tokens, parser_ctx),
         Finish => parse_finish(tokens, parser_ctx),
+        Return => parse_return(tokens, parser_ctx),
         t => Err(ParserError::ExpectedType {
             expected_type: Type::Void,
             token,
@@ -291,7 +292,7 @@ fn parse_empty_expr(
     tokens: &mut TokenIter,
     parser_ctx: &mut ParserCtx,
 ) -> Result<Expr, CompilerError> {
-    let token = tokens.next().unwrap();
+    let token = tokens.peek().unwrap();
     match token.token_type {
         NewLine | SemiColon => Ok(Expr {
             expr_type: Type::Void,
@@ -322,7 +323,23 @@ fn parse_finish(tokens: &mut TokenIter, parser_ctx: &mut ParserCtx) -> Result<Ex
         }
     }
 }
-
+fn parse_return(tokens: &mut TokenIter, parser_ctx: &mut ParserCtx) -> Result<Expr, CompilerError> {
+    let token = tokens.next().unwrap();
+    match token.token_type {
+        Return => Ok(Expr {
+            expr_type: Type::Void,
+            kind: ExprKind::Return {
+                expr: Box::new(parse_expr(tokens, parser_ctx)?),
+            },
+        }),
+        _ => {
+            return Err(ParserError::ExpectedToken {
+                expected_token_type: TokenType::Return,
+                token,
+            })?;
+        }
+    }
+}
 fn try_parse_void_expr(tokens: &mut TokenIter, parser_ctx: &mut ParserCtx) -> Option<Expr> {
     let checkpoint = tokens.index;
     if let Ok(void_expr) = parse_void_expr(tokens, parser_ctx) {
@@ -439,20 +456,31 @@ fn parse_block(tokens: &mut TokenIter, parser_ctx: &mut ParserCtx) -> Result<Exp
             Ok(Expr {
                 expr_type,
                 kind: ExprKind::Return { expr },
-            }) => block_type = Some(expr.expr_type),
+            }) => {
+                block_type = Some(expr.clone().expr_type);
+                void_exprs.push(Expr {
+                    expr_type,
+                    kind: ExprKind::Return { expr },
+                });
+            }
             Ok(void_expr) => void_exprs.push(void_expr),
             Err(error) => return Err(error),
         }
         token = tokens.next()?;
         match token.token_type {
             NewLine | SemiColon => {}
-            _ => return Err(ParserError::ExpecetedStatementEnd { token }.into()),
+            _ => return Err(ParserError::ExpectedStatementEnd { token }.into()),
         }
         token = tokens.peek()?;
     }
-
-    let scope_info = parser_ctx.current_scope_info.clone();
     parser_ctx.current_scope_info.out_of_scope();
+    let scope_info = parser_ctx.current_scope_info.clone();
+    // dbg!(&parser_ctx.current_scope_info)
+    token = tokens.peek()?;
+    if matches!(token.token_type, CloseCurlyBracket) {
+        tokens.next()?;
+    }
+
     Ok(Expr {
         expr_type: match block_type {
             Some(expr_type) => expr_type,
@@ -727,12 +755,12 @@ fn check_solve_expr(expr: &Expr, parser_ctx: &mut ParserCtx) -> Result<Expr, Com
                 VarValue::Known(var_index) => {
                     (ident, var_type) = parser_ctx.variable_info.vars[*var_index].clone();
                 }
-                VarValue::Undetermined { ident: new_ident, var_type: new_var_type } => {
-                    (ident, var_type) = (new_ident.clone(), new_var_type.clone())
-                },
+                VarValue::Undetermined {
+                    ident: new_ident,
+                    var_type: new_var_type,
+                } => (ident, var_type) = (new_ident.clone(), new_var_type.clone()),
             }
             let solved_var_type = get_new_type(&var_type, &parser_ctx.type_equations);
-            println!("solved variable type is: {:?}", solved_var_type);
             if let Some(variable_infos) = parser_ctx.variable_info.var_parsing_assist.get(&ident) {
                 for (decl_var_type, var_info) in variable_infos.iter().rev() {
                     let final_decl_var_type;
@@ -751,7 +779,6 @@ fn check_solve_expr(expr: &Expr, parser_ctx: &mut ParserCtx) -> Result<Expr, Com
                     }
                 }
             }
-            // dbg!(&var_type);
             if !parser_ctx.is_var_accesable_or_available(
                 &ident,
                 &solved_var_type,
@@ -762,8 +789,6 @@ fn check_solve_expr(expr: &Expr, parser_ctx: &mut ParserCtx) -> Result<Expr, Com
                     var_type: solved_var_type.clone(),
                 })?;
             }
-            println!("vars: {:?}", &parser_ctx.variable_info.vars);
-            // println!("parsing assist vars: {:?}", &parser_ctx.variable_info.var_parsing_assist);
             ExprKind::Variable {
                 var: VarValue::Known(
                     parser_ctx
@@ -805,11 +830,13 @@ fn scratch_pad() {
     // println!("tokens: {:?}", &tokens);
     let mut token_iter = TokenIter::new(tokens);
     let mut parser_ctx = ParserCtx::new();
-    let mut declaration = parse_declaration(&mut token_iter, &mut parser_ctx).unwrap();
+    let mut declaration = Box::new(parse_declaration(&mut token_iter, &mut parser_ctx).unwrap());
     gen_type_equations(&mut parser_ctx, &declaration);
 
     dbg!(&declaration);
-    declaration = check_solve_expr(&declaration, &mut parser_ctx).unwrap();
+
+    dbg!(&parser_ctx.variable_info.vars);
+    declaration = Box::new(check_solve_expr(&declaration, &mut parser_ctx).unwrap());
     dbg!(&parser_ctx.type_equations);
     dbg!(declaration);
     assert!(true)

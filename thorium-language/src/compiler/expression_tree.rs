@@ -26,8 +26,14 @@ impl ScopeInfo {
         self.shared_scopes.push(self.id);
     }
     pub fn out_of_scope(&mut self) {
+        println!("#########going out of scope");
         self.scope_level -= 1;
         self.shared_scopes.pop();
+        if let Some(new_id) = self.shared_scopes.last() {
+            self.id = *new_id
+        } else {
+            self.id = 0
+        }
     }
 }
 
