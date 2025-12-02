@@ -463,6 +463,16 @@ fn parse_block(tokens: &mut TokenIter, parser_ctx: &mut ParserCtx) -> Result<Exp
                     kind: ExprKind::Return { expr },
                 });
             }
+            Ok(Expr {
+                expr_type,
+                kind: ExprKind::Finish { expr },
+            }) => {
+                block_type = Some(Type::Unknown(next_unkown_type()));
+                void_exprs.push(Expr {
+                    expr_type,
+                    kind: ExprKind::Finish { expr },
+                });
+            }
             Ok(void_expr) => void_exprs.push(void_expr),
             Err(error) => return Err(error),
         }
@@ -484,7 +494,7 @@ fn parse_block(tokens: &mut TokenIter, parser_ctx: &mut ParserCtx) -> Result<Exp
     Ok(Expr {
         expr_type: match block_type {
             Some(expr_type) => expr_type,
-            None => Type::Unknown(next_unkown_type()),
+            None => Type::Void,
         },
         kind: ExprKind::Block {
             scope_info,
@@ -718,6 +728,9 @@ fn get_new_type(original_type: &Type, type_equations: &HashMap<Type, Type>) -> T
     match original_type {
         Type::Unknown(id) | Type::UnknownNumber(id) | Type::UnknownFloat(id) => {
             if let Some(new_type) = type_equations.get(original_type) {
+                if matches!(original_type, new_type) {
+                    return original_type.clone();
+                }
                 get_new_type(new_type, type_equations)
             } else {
                 original_type.clone()
@@ -742,9 +755,12 @@ fn check_solve_expr(expr: &Expr, parser_ctx: &mut ParserCtx) -> Result<Expr, Com
                 },
             }
         }
-        ExprKind::Return { expr } => ExprKind::Return {
-            expr: Box::new(check_solve_expr(&expr, parser_ctx)?),
-        },
+        ExprKind::Return { expr } => {
+            println!("@return expr: {:?}", expr);
+            ExprKind::Return {
+                expr: Box::new(check_solve_expr(&expr, parser_ctx)?),
+            }
+        }
         ExprKind::Finish { expr } => ExprKind::Finish {
             expr: Box::new(check_solve_expr(&expr, parser_ctx)?),
         },

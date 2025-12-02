@@ -1,10 +1,10 @@
 let main() i64 {
     let a {
-        
+        return 10
     }
 
     let b = 10
     let b = 10.0
-    finish b
+    finish a
 }
 
